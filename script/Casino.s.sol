@@ -20,8 +20,9 @@ contract CasinoScript is Script {
     function run() public {
         // Retrieve private key from environment variables (standard Foundry practice)
         // You can also use vm.startBroadcast() without arguments if using default sender
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
+        // uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        // vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
         // 1. Deploy the Bank Treasury first (it has no dependencies)
         bank = new BankTreasury();

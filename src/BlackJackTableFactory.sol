@@ -75,7 +75,7 @@ contract BlackjackTableFactory {
         require(maxExposure > 0 && floatLimit > 0, "BAD_LIMITS");
 
         // Deploy new BlackjackTable; msg.sender becomes the dealer
-        Blackjack t = new Blackjack(payable(address(bank)), address(rng));
+        Blackjack t = new Blackjack(bank, rng);
         table = address(t);
 
         // Register table in BankTreasury for controlled bankroll exposure

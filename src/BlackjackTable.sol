@@ -143,7 +143,8 @@ contract Blackjack {
 
     function joinGame(
         uint256 gameId,
-        bytes32 playerHash
+        bytes32 playerHash,
+        uint256 randomNumber
     ) external payable inState(GameState.BETTING, gameId) {
         Game storage game = games[gameId];
 
@@ -165,14 +166,13 @@ contract Blackjack {
         game.players[idx].status = PlayerStatus.ACTIVE;
         game.isPlayer[msg.sender] = true;
         //add commit
-        crRandom.commit(playerHash);
+        crRandom.commit(playerHash, randomNumber);
 
         emit PlayerJoined(gameId, msg.sender, msg.value);
     }
 
     function commitPlayer(
-        uint256 gameId,
-        bytes32 playerSecret
+        uint256 gameId
     ) external payable inState(GameState.COMMITTED, gameId) {
         Game storage game = games[gameId];
         if (game.state != GameState.COMMITTED) revert InvalidGameState();
@@ -185,26 +185,27 @@ contract Blackjack {
 
     function commitAndStart(
         uint256 gameId,
-        bytes32 dealerHash
+        bytes32 dealerHash,
+        uint256 randomNumber
     ) external onlyHouse inState(GameState.BETTING, gameId) {
         Game storage game = games[gameId];
         if (game.state != GameState.BETTING) revert InvalidGameState();
         if (game.players.length == 0) revert NoPlayers();
 
         game.state = GameState.COMMITTED;
-        crRandom.commit(dealerHash);
+        crRandom.commit(dealerHash, randomNumber);
         emit CommitCountdownStart(gameId);
     }
 
     function revealAndDeal(
         uint256 gameId,
-        bytes32 dealerSecret
+        uint256 dealerSecret
     ) external onlyHouse inState(GameState.COMMITTED, gameId) {
         Game storage game = games[gameId];
         if (game.state != GameState.COMMITTED) revert InvalidGameState();
 
         // Reveal to finalize entropy
-        crRandom.reveal(gameId, dealerSecret);
+        crRandom.reveal(dealerSecret);
 
         game.state = GameState.DEALING;
 
@@ -297,7 +298,8 @@ contract Blackjack {
     function _drawCard(uint256 gameId) internal returns (Card memory) {
         Game storage game = games[gameId];
 
-        uint256 seed = crRandom.generateFinalRandom();
+        crRandom.generateFinalRandom();
+        uint256 seed = crRandom.getFinalRandom(crRandom.roundId());
         uint256 rand = uint(
             keccak256(abi.encodePacked(seed, ++game.rngRoundId))
         );

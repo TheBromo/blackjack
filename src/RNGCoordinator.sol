@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 contract CommitRevealRandom {
     address public dealer;
-    uint256 public gameId;
+    uint256 public roundId;
     uint256 public commitDeadline;
     uint256 public revealDeadline;
 
@@ -61,12 +61,12 @@ contract CommitRevealRandom {
         uint256 _commitDuration,
         uint256 _revealDuration
     ) external onlyDealer inPhase(CRRPhase.Setup) {
-        gameId++;
+        roundId++;
         commitDeadline = block.timestamp + _commitDuration;
         revealDeadline = commitDeadline + _revealDuration;
         phase = CRRPhase.Commit;
 
-        emit Started(gameId, commitDeadline, revealDeadline);
+        emit Started(roundId, commitDeadline, revealDeadline);
     }
 
     /// @notice Commit a hash of your random number
@@ -77,11 +77,11 @@ contract CommitRevealRandom {
     ) external inPhase(CRRPhase.Commit) {
         require(block.timestamp < commitDeadline, "Commit deadline passed");
         require(
-            !commitments[gameId][msg.sender].committed,
+            !commitments[roundId][msg.sender].committed,
             "Already committed"
         );
 
-        commitments[gameId][msg.sender] = Commitment({
+        commitments[roundId][msg.sender] = Commitment({
             commitHash: _commitHash,
             randomNumber: randomNumber,
             secret: 0,
@@ -89,9 +89,9 @@ contract CommitRevealRandom {
             revealed: false
         });
 
-        gamePlayers[gameId].push(msg.sender);
+        gamePlayers[roundId].push(msg.sender);
 
-        emit Committed(gameId, msg.sender);
+        emit Committed(roundId, msg.sender);
     }
 
     /// @notice Transition to reveal phase
@@ -104,10 +104,10 @@ contract CommitRevealRandom {
 
     /// @notice Reveal your committed random number
     /// @param _secret The secret you used in the commit
-    function reveal(bytes32 _secret) external inPhase(CRRPhase.Reveal) {
+    function reveal(uint256 _secret) external inPhase(CRRPhase.Reveal) {
         require(block.timestamp < revealDeadline, "Reveal deadline passed");
 
-        Commitment storage commitment = commitments[gameId][msg.sender];
+        Commitment storage commitment = commitments[roundId][msg.sender];
         require(commitment.committed, "No commitment found");
         require(!commitment.revealed, "Already revealed");
 
@@ -119,21 +119,21 @@ contract CommitRevealRandom {
         commitment.revealed = true;
         commitment.secret = _secret;
 
-        emit Revealed(gameId, msg.sender, commitment.secret);
+        emit Revealed(roundId, msg.sender, commitment.secret);
     }
 
     /// @notice Generate final random number from all reveals
     function generateFinalRandom() external inPhase(CRRPhase.Reveal) {
         require(block.timestamp >= revealDeadline, "Reveal phase not ended");
 
-        address[] memory players = gamePlayers[gameId];
+        address[] memory players = gamePlayers[roundId];
         require(players.length > 0, "No players");
 
         uint256 combinedRandom = 0;
         uint256 revealedCount = 0;
 
         for (uint256 i = 0; i < players.length; i++) {
-            Commitment memory commitment = commitments[gameId][players[i]];
+            Commitment memory commitment = commitments[roundId][players[i]];
             if (commitment.revealed) {
                 combinedRandom ^= commitment.randomNumber;
                 revealedCount++;
@@ -145,10 +145,10 @@ contract CommitRevealRandom {
         // Add block hash for additional entropy
         combinedRandom ^= uint256(blockhash(block.number - 1));
 
-        finalRandom[gameId] = combinedRandom;
+        finalRandom[roundId] = combinedRandom;
         phase = CRRPhase.Finished;
 
-        emit RandomGenerated(gameId, combinedRandom);
+        emit RandomGenerated(roundId, combinedRandom);
     }
 
     /// @notice Reset for a new game
@@ -158,7 +158,11 @@ contract CommitRevealRandom {
 
     /// @notice Check if an address has revealed for current game
     function hasRevealed(address _player) external view returns (bool) {
-        return commitments[gameId][_player].revealed;
+        return commitments[roundId][_player].revealed;
+    }
+
+    function getFinalRandom(uint256 id) external view returns (uint256) {
+        return finalRandom[id];
     }
 
     /// @notice Get commitment details for a player

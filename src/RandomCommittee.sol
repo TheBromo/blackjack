@@ -178,7 +178,6 @@ contract RandomCommittee {
         round.hasRevealed[msg.sender] = true;
     }
 
-    // --- Finalize round, calculate combined value (the beacon value) and start with next round ---
     function finalizeRound(uint256 _roundId) external inPhase(_roundId, Phase.Reveal) onlyOwner {
         Round storage round = rounds[_roundId];
         require(block.timestamp > round.currentPhaseStartTime + REVEAL_DURATION, "Reveal phase not yet over");
@@ -188,22 +187,22 @@ contract RandomCommittee {
         bytes32 combinedValue = 0;
         uint256 participants = 0;
 
-        // We check each commmittee member whether it acted correctly.
-        // We iterate from back to front of the array because of the efficient way we remove dishonest members (using pop())
-        for (uint256 i = uint256(round.committeeMembers.length) - 1; i >= 0; i--) {
-            address member = round.committeeMembers[i];
+        for (uint256 i = round.committeeMembers.length; i > 0; i--) {
+            uint256 index = i - 1;
+            address member = round.committeeMembers[index];
 
             // 1. Active member did not commit
             if (!round.hasCommitted[member]) {
-                _slash(_roundId, member); // Slashes and removes from committeeMembers
+                _slash(_roundId, member);
             }
             // 2. Active member did not reveal
             else if (!round.hasRevealed[member]) {
-                _slash(_roundId, member); // Slashes and removes from committeeMembers
+                _slash(_roundId, member);
             }
             // 3. Member participated correctly
             else {
                 // combinedValue = keccak256(abi.encodePacked(combinedValue, round.revealedValues[member]));
+                // Assuming optimizedHash is defined elsewhere in your contract
                 combinedValue = optimizedHash(combinedValue, round.revealedValues[member]);
                 participants++;
             }

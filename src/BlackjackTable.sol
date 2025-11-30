@@ -134,9 +134,9 @@ contract Blackjack {
             maxWinningsCanBePaid(gameId, betAmount),
             "bet to high, could not be paid when hitting black jack. Place lower bet"
         );
-
-        (bool success,) = TREASURY.call{value: msg.value}("");
-        require(success, "Slash transfer failed");
+        // 1. Send the FEE to the Treasury immediately
+        (bool success,) = TREASURY.call{value: fee}("");
+        require(success, "Fee transfer failed");
 
         game.players.push();
         uint256 idx = game.players.length - 1;
@@ -148,13 +148,19 @@ contract Blackjack {
         emit PlayerJoined(gameId, msg.sender, msg.value);
     }
 
-    function startCommitPhase(uint256 gameId) external onlyHouse inState(GameState.JOINING, gameId) {
+    function getPlayerList(uint256 gameId) external view onlyHouse returns (address[] memory committee) {
         Game storage game = games[gameId];
-        address[] memory committee;
+        committee = new address[](game.players.length);
         for (uint256 i = 0; i < game.players.length; i++) {
             committee[i] = game.players[i].addr;
         }
-        uint256 rngId = RNG.createRound(committee);
+    }
+
+    function startCommitPhase(uint256 gameId, uint256 rngId) external onlyHouse inState(GameState.JOINING, gameId) {
+        //do this on the client
+        //FIX: check if rng is in right phase and no already completed
+        // uint256 rngId = RNG.createRound(committee);
+        Game storage game = games[gameId];
         game.state = GameState.COMMITTED;
         game.rngRoundId = rngId;
         emit CommitCountdownStart(gameId, rngId);
@@ -194,6 +200,7 @@ contract Blackjack {
     // ============================================================
 
     function hit(uint256 gameId) external inState(GameState.PLAYING, gameId) {
+        //FIX: generate new rng
         Game storage game = games[gameId];
         if (game.state != GameState.PLAYING) revert InvalidGameState();
 
@@ -294,8 +301,6 @@ contract Blackjack {
     function _advanceToNextActivePlayer(uint256 gameId) internal {
         Game storage game = games[gameId];
 
-        game.currentPlayerIndex++;
-
         // Find next active player
         while (game.currentPlayerIndex < game.players.length) {
             if (game.players[game.currentPlayerIndex].status == PlayerStatus.ACTIVE) {
@@ -310,6 +315,7 @@ contract Blackjack {
 
     function _playDealerHand(uint256 gameId) internal {
         Game storage game = games[gameId];
+        //FIX: generate new rng
 
         // Dealer must hit on 16 or less, stand on 17+
         while (game.dealerHand.total < 17) {
@@ -354,7 +360,8 @@ contract Blackjack {
 
             // ------------- Payout if needed -------------
             if (payout > 0) {
-                payable(player.addr).transfer(payout);
+                (bool success,) = payable(player.addr).call{value: payout}("");
+                require(success, "Payout transfer failed");
             }
 
             emit GameResolved(gameId, player.addr, won, payout);
@@ -382,7 +389,7 @@ contract Blackjack {
             PlayerState storage player = game.players[i];
             payout += player.bet + (player.bet * 3) / 2;
         }
-        return payout + newBet <= TREASURY.balance;
+        return payout + newBet <= address(this).balance;
     }
 
     function getPlayerHand(uint256 gameId, address player) external view returns (Card[] memory cards, uint8 total) {
@@ -425,6 +432,4 @@ contract Blackjack {
     function withdraw() external onlyHouse {
         payable(house).transfer(address(this).balance);
     }
-
-    receive() external payable {}
 }

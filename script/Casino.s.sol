@@ -5,15 +5,15 @@ import {Script, console} from "forge-std/Script.sol";
 
 // Make sure these paths match your actual file structure in /src
 import {BankTreasury} from "../src/BankTreasury.sol";
+import {Blackjack} from "../src/BlackjackTable.sol";
 import {CommitRevealRandom} from "../src/RNGCoordinator.sol";
-import {BlackjackTableFactory} from "../src/BlackjackTableFactory.sol";
 
 // Assuming you still want to deploy the Counter, otherwise you can remove it
 
 contract CasinoScript is Script {
     BankTreasury public bank;
     CommitRevealRandom public rng;
-    BlackjackTableFactory public factory;
+    Blackjack public table;
 
     function setUp() public {}
 
@@ -21,8 +21,9 @@ contract CasinoScript is Script {
         // Retrieve private key from environment variables (standard Foundry practice)
         // You can also use vm.startBroadcast() without arguments if using default sender
         // uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        uint256 deplyerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
         // vm.startBroadcast(deployerPrivateKey);
-        vm.startBroadcast();
+        vm.startBroadcast(deplyerPrivateKey);
 
         // 1. Deploy the Bank Treasury first (it has no dependencies)
         bank = new BankTreasury();
@@ -32,13 +33,6 @@ contract CasinoScript is Script {
         rng = new CommitRevealRandom();
         console.log("RNG (CommitRevealRandom) deployed at:", address(rng));
 
-        // 3. Deploy the Factory
-        // The factory constructor requires: (address payable _bank, address _rng)
-        factory = new BlackjackTableFactory(
-            payable(address(bank)),
-            address(rng)
-        );
-        console.log("BlackjackTableFactory deployed at:", address(factory));
 
         // ------------------------------------------------------------
         // OPTIONAL: SETUP CONFIGURATION
@@ -47,13 +41,14 @@ contract CasinoScript is Script {
 
         // Example: Create the first table via the factory
         // params: minBet, maxBet, maxExposure, floatLimit
-        address newTable = factory.createTable(
-            0.01 ether, // Min Bet
-            1 ether, // Max Bet
-            10 ether, // Max Exposure
-            5 ether // Float Limit
+        table = new Blackjack(
+            bank,
+            rng
         );
-        console.log("Initial BlackjackTable deployed at:", newTable);
+
+        // Register table in BankTreasury for controlled bankroll exposure
+        bank.authorizeTable(address(table), 10 ether, 5 ether);
+        console.log("table authorized",address(table));
 
         vm.stopBroadcast();
     }

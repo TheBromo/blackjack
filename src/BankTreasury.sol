@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.20;
 
 contract BankTreasury {
     // -------------------- Ownable --------------------
@@ -52,49 +52,16 @@ contract BankTreasury {
     uint256 public totalFloatOut;
 
     // -------------------- Events ----------------------------
-    event TableAuthorized(
-        address indexed table,
-        uint256 maxExposure,
-        uint256 floatLimit
-    );
-    event TableUpdated(
-        address indexed table,
-        uint256 maxExposure,
-        uint256 floatLimit,
-        bool allowed
-    );
+    event TableAuthorized(address indexed table, uint256 maxExposure, uint256 floatLimit);
+    event TableUpdated(address indexed table, uint256 maxExposure, uint256 floatLimit, bool allowed);
 
-    event ExposureLocked(
-        address indexed table,
-        uint256 delta,
-        uint256 newExposure,
-        uint256 total
-    );
-    event ExposureReleased(
-        address indexed table,
-        uint256 delta,
-        uint256 newExposure,
-        uint256 total
-    );
+    event ExposureLocked(address indexed table, uint256 delta, uint256 newExposure, uint256 total);
+    event ExposureReleased(address indexed table, uint256 delta, uint256 newExposure, uint256 total);
 
-    event FloatRequested(
-        address indexed table,
-        uint256 amount,
-        uint256 tableFloat,
-        uint256 total
-    );
-    event FloatReturned(
-        address indexed table,
-        uint256 amount,
-        uint256 tableFloat,
-        uint256 total
-    );
+    event FloatRequested(address indexed table, uint256 amount, uint256 tableFloat, uint256 total);
+    event FloatReturned(address indexed table, uint256 amount, uint256 tableFloat, uint256 total);
 
-    event FeeReceived(
-        address indexed table,
-        uint256 amount,
-        uint256 cumulative
-    );
+    event FeeReceived(address indexed table, uint256 amount, uint256 cumulative);
     event OwnerDeposit(address indexed from, uint256 amount);
     event OwnerWithdraw(address indexed to, uint256 amount);
 
@@ -114,32 +81,18 @@ contract BankTreasury {
     }
 
     // -------------------- Admin: table control -----------------
-    function authorizeTable(
-        address table,
-        uint256 maxExposure,
-        uint256 floatLimit
-    ) external onlyOwner {
+    function authorizeTable(address table, uint256 maxExposure, uint256 floatLimit) external onlyOwner {
         require(table != address(0), "ZERO_ADDR");
         require(!tables[table].allowed, "ALREADY_AUTH");
 
         tables[table] = Table({
-            allowed: true,
-            maxExposure: maxExposure,
-            floatLimit: floatLimit,
-            exposure: 0,
-            floatOut: 0,
-            feesPaid: 0
+            allowed: true, maxExposure: maxExposure, floatLimit: floatLimit, exposure: 0, floatOut: 0, feesPaid: 0
         });
 
         emit TableAuthorized(table, maxExposure, floatLimit);
     }
 
-    function updateTable(
-        address table,
-        uint256 maxExposure,
-        uint256 floatLimit,
-        bool allowed
-    ) external onlyOwner {
+    function updateTable(address table, uint256 maxExposure, uint256 floatLimit, bool allowed) external onlyOwner {
         require(table != address(0), "ZERO_ADDR");
         require(tables[table].allowed || allowed, "NOT_AUTHED");
 
@@ -157,12 +110,9 @@ contract BankTreasury {
         emit OwnerDeposit(msg.sender, msg.value);
     }
 
-    function withdrawBankroll(
-        address payable to,
-        uint256 amount
-    ) external onlyOwner nonReentrant {
+    function withdrawBankroll(address payable to, uint256 amount) external onlyOwner nonReentrant {
         require(amount <= address(this).balance, "INSUFFICIENT_AVAILABLE");
-        (bool ok, ) = to.call{value: amount}("");
+        (bool ok,) = to.call{value: amount}("");
         require(ok, "WITHDRAW_FAIL");
         emit OwnerWithdraw(to, amount);
     }
@@ -204,7 +154,7 @@ contract BankTreasury {
         t.floatOut += amount;
         totalFloatOut += amount;
 
-        (bool ok, ) = payable(msg.sender).call{value: amount}("");
+        (bool ok,) = payable(msg.sender).call{value: amount}("");
         require(ok, "FLOAT_FAIL");
 
         emit FloatRequested(msg.sender, amount, t.floatOut, totalFloatOut);

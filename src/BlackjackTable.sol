@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./RNGCoordinator.sol";
+import "./RandomCommittee.sol";
 import "./BankTreasury.sol";
 
 /**
@@ -10,17 +10,18 @@ import "./BankTreasury.sol";
  *         Max 5 players, standard blackjack rules
  */
 contract Blackjack {
-    CommitRevealRandom public immutable crRandom;
-    BankTreasury public immutable bank;
+    RandomCommittee public immutable rng;
+    address payable public immutable treasury;
 
-    uint8 public constant MAX_PLAYERS = 5;
+    uint8 public constant MAX_PLAYERS = 7;
     uint256 public constant FEE_PERCENT = 5; // 5%
     uint256 public constant MIN_BET = 0.01 ether;
     uint256 public constant MAX_BET = 10 ether;
 
     enum GameState {
-        BETTING,
+        JOINING,
         COMMITTED,
+        BETTING,
         DEALING,
         PLAYING,
         DEALER_TURN,
@@ -55,6 +56,7 @@ contract Blackjack {
 
     struct Game {
         uint256 rngRoundId;
+        uint256 cardCount;
         GameState state;
         PlayerState[] players;
         Hand dealerHand;
@@ -68,37 +70,14 @@ contract Blackjack {
     address public house;
 
     event GameStarted(uint256 indexed gameId);
-    event PlayerJoined(
-        uint256 indexed gameId,
-        address indexed player,
-        uint256 bet
-    );
-    event CommitCountdownStart(uint256 indexed gameId);
-    event CardDealt(
-        uint256 indexed gameId,
-        address indexed player,
-        uint8 value,
-        uint8 suit
-    );
-    event DealerCardDealt(
-        uint256 indexed gameId,
-        uint8 value,
-        uint8 suit,
-        bool hidden
-    );
-    event PlayerAction(
-        uint256 indexed gameId,
-        address indexed player,
-        string action
-    );
-    event GameResolved(
-        uint256 indexed gameId,
-        address indexed player,
-        bool won,
-        uint256 payout
-    );
+    event PlayerJoined(uint256 indexed gameId, address indexed player, uint256 bet);
+    event CommitCountdownStart(uint256 indexed gameId, uint256 indexed rngId);
+    event CardDealt(uint256 indexed gameId, address indexed player, uint8 value, uint8 suit);
+    event DealerCardDealt(uint256 indexed gameId, uint8 value, uint8 suit, bool hidden);
+    event PlayerAction(uint256 indexed gameId, address indexed player, string action);
+    event GameResolved(uint256 indexed gameId, address indexed player, bool won, uint256 payout);
 
-    error OnlyHouse();
+    error OnlyHouseAllowed();
     error InvalidGameState();
     error GameFull();
     error InvalidBet();
@@ -108,7 +87,7 @@ contract Blackjack {
     error NoPlayers();
 
     modifier onlyHouse() {
-        if (msg.sender != house) revert OnlyHouse();
+        if (msg.sender != house) revert OnlyHouseAllowed();
         _;
     }
 
@@ -117,10 +96,10 @@ contract Blackjack {
         _;
     }
 
-    constructor(BankTreasury _bank, CommitRevealRandom _rng) {
+    constructor(address payable _treasury, RandomCommittee _rng) {
         house = msg.sender;
-        bank = _bank;
-        crRandom = _rng;
+        treasury = _treasury;
+        rng = _rng;
         currentGameId = 0;
     }
 
@@ -128,35 +107,30 @@ contract Blackjack {
     //  GAME SETUP
     // ============================================================
 
-    function startGame() external onlyHouse returns (uint256 gameId) {
+    function createGame() external onlyHouse returns (uint256 gameId) {
         //setup game
         gameId = ++currentGameId;
-        games[gameId].state = GameState.BETTING;
-        Game storage game = games[gameId];
-
-        //setup up random gen
-        game.rngRoundId = 0;
-        crRandom.start(60, 60);
-
+        games[gameId].state = GameState.JOINING;
         emit GameStarted(gameId);
     }
 
-    function joinGame(
-        uint256 gameId,
-        bytes32 playerHash,
-        uint256 randomNumber
-    ) external payable inState(GameState.BETTING, gameId) {
+    function joinGame(uint256 gameId) external payable inState(GameState.JOINING, gameId) {
         Game storage game = games[gameId];
 
         if (game.players.length >= MAX_PLAYERS) revert GameFull();
         if (msg.value < MIN_BET || msg.value > MAX_BET) revert InvalidBet();
         if (game.isPlayer[msg.sender]) revert AlreadyJoined();
+        //TODO: verify if could pay all players
 
-        //pay fee
         uint256 fee = (msg.value * FEE_PERCENT) / 100;
         uint256 betAmount = msg.value - fee;
-        bank.lockExposure(betAmount);
-        bank.depositFee{value: fee}();
+        require(
+            maxWinningsCanBePaid(gameId, betAmount),
+            "bet to high, could not be paid when hitting black jack. Place lower bet"
+        );
+
+        (bool success,) = treasury.call{value: msg.value}("");
+        require(success, "Slash transfer failed");
 
         game.players.push();
         uint256 idx = game.players.length - 1;
@@ -165,47 +139,28 @@ contract Blackjack {
         game.players[idx].bet = betAmount;
         game.players[idx].status = PlayerStatus.ACTIVE;
         game.isPlayer[msg.sender] = true;
-        //add commit
-        crRandom.commit(playerHash, randomNumber);
-
         emit PlayerJoined(gameId, msg.sender, msg.value);
     }
 
-    function commitPlayer(
-        uint256 gameId
-    ) external payable inState(GameState.COMMITTED, gameId) {
+    function startCommitPhase(uint256 gameId) external onlyHouse inState(GameState.JOINING, gameId) {
         Game storage game = games[gameId];
-        if (game.state != GameState.COMMITTED) revert InvalidGameState();
-        if (game.players.length == 0) revert NoPlayers();
+        address[] memory committee;
+        for (uint256 i = 0; i < game.players.length; i++) {
+            committee[i] = game.players[i].addr;
+        }
+        uint256 rngId = rng.createRound(committee);
+        game.state = GameState.COMMITTED;
+        game.rngRoundId = rngId;
+        emit CommitCountdownStart(gameId, rngId);
     }
 
     // ============================================================
     //  RNG COMMIT & DEAL
     // ============================================================
 
-    function commitAndStart(
-        uint256 gameId,
-        bytes32 dealerHash,
-        uint256 randomNumber
-    ) external onlyHouse inState(GameState.BETTING, gameId) {
+    function deal(uint256 gameId) external onlyHouse inState(GameState.COMMITTED, gameId) {
         Game storage game = games[gameId];
-        if (game.state != GameState.BETTING) revert InvalidGameState();
-        if (game.players.length == 0) revert NoPlayers();
-
-        game.state = GameState.COMMITTED;
-        crRandom.commit(dealerHash, randomNumber);
-        emit CommitCountdownStart(gameId);
-    }
-
-    function revealAndDeal(
-        uint256 gameId,
-        uint256 dealerSecret
-    ) external onlyHouse inState(GameState.COMMITTED, gameId) {
-        Game storage game = games[gameId];
-        if (game.state != GameState.COMMITTED) revert InvalidGameState();
-
-        // Reveal to finalize entropy
-        crRandom.reveal(dealerSecret);
+        require(rng.isRoundFinalized(game.rngRoundId), "Random committee must finish before continuing");
 
         game.state = GameState.DEALING;
 
@@ -298,11 +253,8 @@ contract Blackjack {
     function _drawCard(uint256 gameId) internal returns (Card memory) {
         Game storage game = games[gameId];
 
-        crRandom.generateFinalRandom();
-        uint256 seed = crRandom.getFinalRandom(crRandom.roundId());
-        uint256 rand = uint(
-            keccak256(abi.encodePacked(seed, ++game.rngRoundId))
-        );
+        bytes32 seed = rng.finalRandomValue(game.rngRoundId);
+        uint256 rand = uint256(keccak256(abi.encodePacked(seed, ++game.cardCount)));
 
         uint8 value = uint8((rand % 13) + 1); // 1-13
         uint8 suit = uint8((rand / 13) % 4); // 0-3
@@ -334,17 +286,13 @@ contract Blackjack {
     }
 
     function _advanceToNextActivePlayer(uint256 gameId) internal {
-        //FIXME:
         Game storage game = games[gameId];
 
         game.currentPlayerIndex++;
 
         // Find next active player
         while (game.currentPlayerIndex < game.players.length) {
-            if (
-                game.players[game.currentPlayerIndex].status ==
-                PlayerStatus.ACTIVE
-            ) {
+            if (game.players[game.currentPlayerIndex].status == PlayerStatus.ACTIVE) {
                 return;
             }
             game.currentPlayerIndex++;
@@ -371,54 +319,8 @@ contract Blackjack {
 
         uint8 dealerTotal = game.dealerHand.total;
         bool dealerBusted = dealerTotal > 21;
-        bool dealerBlackjack = dealerTotal == 21 &&
-            game.dealerHand.cards.length == 2;
+        bool dealerBlackjack = dealerTotal == 21 && game.dealerHand.cards.length == 2;
 
-        uint256 totalPayoutNeeded = 0;
-
-        // ---------------------------------------
-        // 1. First pass: calculate total payouts
-        // ---------------------------------------
-        for (uint256 i = 0; i < game.players.length; i++) {
-            PlayerState storage player = game.players[i];
-
-            uint256 payout = 0;
-
-            if (player.status == PlayerStatus.BUSTED) {
-                payout = 0;
-            } else if (player.status == PlayerStatus.BLACKJACK) {
-                if (dealerBlackjack) {
-                    payout = player.bet; // push
-                } else {
-                    payout = player.bet + (player.bet * 3) / 2; // 3:2
-                }
-            } else if (dealerBusted) {
-                payout = player.bet * 2;
-            } else if (player.hand.total > dealerTotal) {
-                payout = player.bet * 2;
-            } else if (player.hand.total == dealerTotal) {
-                payout = player.bet; // push
-            } else {
-                payout = 0;
-            }
-
-            totalPayoutNeeded += payout;
-        }
-
-        // ---------------------------------------------------
-        // 2. Request float from treasury if needed
-        // ---------------------------------------------------
-        uint256 tableBalance = address(this).balance;
-        if (totalPayoutNeeded > tableBalance) {
-            uint256 deficit = totalPayoutNeeded - tableBalance;
-
-            // Pull ETH from treasury
-            bank.requestFloat(deficit);
-        }
-
-        // -------------------------------
-        // 3. Resolve each player & pay
-        // -------------------------------
         for (uint256 i = 0; i < game.players.length; i++) {
             PlayerState storage player = game.players[i];
 
@@ -444,9 +346,6 @@ contract Blackjack {
                 payout = player.bet;
             }
 
-            // ------------- Release exposure now that the player's round is over -------------
-            bank.releaseExposure(player.bet);
-
             // ------------- Payout if needed -------------
             if (payout > 0) {
                 payable(player.addr).transfer(payout);
@@ -456,10 +355,7 @@ contract Blackjack {
         }
     }
 
-    function _getPlayerIndex(
-        uint256 gameId,
-        address player
-    ) internal view returns (uint256) {
+    function _getPlayerIndex(uint256 gameId, address player) internal view returns (uint256) {
         Game storage game = games[gameId];
         for (uint256 i = 0; i < game.players.length; i++) {
             if (game.players[i].addr == player) {
@@ -473,38 +369,35 @@ contract Blackjack {
     //  VIEW FUNCTIONS
     // ============================================================
 
-    function getPlayerHand(
-        uint256 gameId,
-        address player
-    ) external view returns (Card[] memory cards, uint8 total) {
+    function maxWinningsCanBePaid(uint256 gameId, uint256 newBet) internal view returns (bool) {
+        Game storage game = games[gameId];
+        uint256 payout;
+        for (uint256 i = 0; i < game.players.length; i++) {
+            PlayerState storage player = game.players[i];
+            payout += player.bet + (player.bet * 3) / 2;
+        }
+        return payout + newBet <= treasury.balance;
+    }
+
+    function getPlayerHand(uint256 gameId, address player) external view returns (Card[] memory cards, uint8 total) {
         uint256 idx = _getPlayerIndex(gameId, player);
         Hand storage hand = games[gameId].players[idx].hand;
         return (hand.cards, hand.total);
     }
 
-    function getDealerVisibleCard(
-        uint256 gameId
-    ) external view returns (Card memory) {
+    function getDealerVisibleCard(uint256 gameId) external view returns (Card memory) {
         Game storage game = games[gameId];
         require(game.dealerHand.cards.length > 0, "No cards dealt");
         return game.dealerHand.cards[0];
     }
 
-    function getDealerHand(
-        uint256 gameId
-    ) external view returns (Card[] memory cards, uint8 total) {
+    function getDealerHand(uint256 gameId) external view returns (Card[] memory cards, uint8 total) {
         Game storage game = games[gameId];
-        require(
-            game.state == GameState.DEALER_TURN ||
-                game.state == GameState.RESOLVED,
-            "Dealer hand hidden"
-        );
+        require(game.state == GameState.DEALER_TURN || game.state == GameState.RESOLVED, "Dealer hand hidden");
         return (game.dealerHand.cards, game.dealerHand.total);
     }
 
-    function getGameInfo(
-        uint256 gameId
-    )
+    function getGameInfo(uint256 gameId)
         external
         view
         returns (GameState state, uint256 playerCount, uint8 currentPlayer)
@@ -513,10 +406,7 @@ contract Blackjack {
         return (game.state, game.players.length, game.currentPlayerIndex);
     }
 
-    function getPlayerStatus(
-        uint256 gameId,
-        address player
-    ) external view returns (PlayerStatus status, uint256 bet) {
+    function getPlayerStatus(uint256 gameId, address player) external view returns (PlayerStatus status, uint256 bet) {
         uint256 idx = _getPlayerIndex(gameId, player);
         PlayerState storage p = games[gameId].players[idx];
         return (p.status, p.bet);

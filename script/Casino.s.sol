@@ -3,16 +3,11 @@ pragma solidity ^0.8.13;
 
 import {Script, console} from "forge-std/Script.sol";
 
-// Make sure these paths match your actual file structure in /src
-import {BankTreasury} from "../src/BankTreasury.sol";
 import {Blackjack} from "../src/BlackjackTable.sol";
-import {CommitRevealRandom} from "../src/RNGCoordinator.sol";
-
-// Assuming you still want to deploy the Counter, otherwise you can remove it
+import {RandomCommittee} from "../src/RandomCommittee.sol";
 
 contract CasinoScript is Script {
-    BankTreasury public bank;
-    CommitRevealRandom public rng;
+    RandomCommittee public rng;
     Blackjack public table;
 
     function setUp() public {}
@@ -21,34 +16,15 @@ contract CasinoScript is Script {
         // Retrieve private key from environment variables (standard Foundry practice)
         // You can also use vm.startBroadcast() without arguments if using default sender
         // uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        uint256 deplyerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+        uint256 deployerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
         // vm.startBroadcast(deployerPrivateKey);
-        vm.startBroadcast(deplyerPrivateKey);
+        vm.startBroadcast(deployerPrivateKey);
 
-        // 1. Deploy the Bank Treasury first (it has no dependencies)
-        bank = new BankTreasury();
-        console.log("BankTreasury deployed at:", address(bank));
-
-        // 2. Deploy the RNG contract (it has no dependencies)
-        rng = new CommitRevealRandom();
+        rng = new RandomCommittee();
         console.log("RNG (CommitRevealRandom) deployed at:", address(rng));
 
-
-        // ------------------------------------------------------------
-        // OPTIONAL: SETUP CONFIGURATION
-        // You can perform initial setup here while you are still broadcasting
-        // ------------------------------------------------------------
-
-        // Example: Create the first table via the factory
-        // params: minBet, maxBet, maxExposure, floatLimit
-        table = new Blackjack(
-            bank,
-            rng
-        );
-
-        // Register table in BankTreasury for controlled bankroll exposure
-        bank.authorizeTable(address(table), 10 ether, 5 ether);
-        console.log("table authorized",address(table));
+        table = new Blackjack(payable(vm.addr(deployerPrivateKey)), rng);
+        console.log("table deployed at:", address(table));
 
         vm.stopBroadcast();
     }

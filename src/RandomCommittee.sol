@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 contract RandomCommittee {
-    address public immutable owner;
+    address public immutable OWNER;
     uint256 public maxRoundId;
     uint256 public commitDeadline;
     uint256 public revealDeadline;
@@ -52,32 +52,45 @@ contract RandomCommittee {
     }
 
     // ===  Duration and Delays
-    uint256 public immutable commitDuration;
-    uint256 public immutable revealDuration;
-    uint256 public immutable revealDelay;
+    uint256 public immutable COMMIT_DURATION;
+    uint256 public immutable REVEAL_DURATION;
+    uint256 public immutable REVEAL_DELAY;
 
     //Mapping Round Number to Round Struct
     mapping(uint256 => Round) public rounds;
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only dealer can call");
+        _onlyOwner();
         _;
+    }
+
+    function _onlyOwner() internal view {
+        require(msg.sender == OWNER, "Only dealer can call");
     }
 
     modifier onlyCommittee(uint256 _roundId) {
-        require(rounds[_roundId].isCommitteeMember[msg.sender], "has to be in committee");
-        _;
-    }
-    modifier inPhase(uint256 _roundId, Phase _phase) {
-        require(rounds[_roundId].currentPhase == _phase, "Invalid phase");
+        _onlyCommittee(_roundId);
         _;
     }
 
+    function _onlyCommittee(uint256 _roundId) internal view {
+        require(rounds[_roundId].isCommitteeMember[msg.sender], "has to be in committee");
+    }
+
+    modifier inPhase(uint256 _roundId, Phase _phase) {
+        _inPhase(_roundId, _phase);
+        _;
+    }
+
+    function _inPhase(uint256 _roundId, Phase _phase) internal view {
+        require(rounds[_roundId].currentPhase == _phase, "Invalid phase");
+    }
+
     constructor() {
-        owner = msg.sender;
-        commitDuration = 10;
-        revealDuration = 10;
-        revealDelay = 10;
+        OWNER = msg.sender;
+        COMMIT_DURATION = 10;
+        REVEAL_DURATION = 10;
+        REVEAL_DELAY = 10;
     }
 
     function createRound(address[] calldata committee) external onlyOwner returns (uint256 roundId) {
@@ -103,7 +116,7 @@ contract RandomCommittee {
 
         // Make sure there is time left too post the commitment in this round
         require(
-            block.timestamp <= round.currentPhaseStartTime + (commitDuration / 2), "Too late for joining this round"
+            block.timestamp <= round.currentPhaseStartTime + (COMMIT_DURATION / 2), "Too late for joining this round"
         );
 
         // Add member
@@ -123,7 +136,7 @@ contract RandomCommittee {
         onlyCommittee(_roundId)
     {
         Round storage round = rounds[_roundId];
-        require(block.timestamp <= round.currentPhaseStartTime + commitDuration, "Time to Commit is over");
+        require(block.timestamp <= round.currentPhaseStartTime + COMMIT_DURATION, "Time to Commit is over");
         require(_commitment != 0, "Commitment cannot be empty");
         require(!round.hasCommitted[msg.sender], "Member has already committed");
 
@@ -135,7 +148,8 @@ contract RandomCommittee {
     function startRevealPhase(uint256 _roundId) external inPhase(_roundId, Phase.Commit) onlyOwner {
         Round storage round = rounds[_roundId];
         require(
-            block.timestamp > round.currentPhaseStartTime + commitDuration + revealDelay, "We can't start revealing yet"
+            block.timestamp > round.currentPhaseStartTime + COMMIT_DURATION + REVEAL_DELAY,
+            "We can't start revealing yet"
         );
 
         round.currentPhase = Phase.Reveal;
@@ -149,13 +163,14 @@ contract RandomCommittee {
         onlyCommittee(_roundId)
     {
         Round storage round = rounds[_roundId];
-        require(block.timestamp <= round.currentPhaseStartTime + revealDuration, "Reveal phase is over");
+        require(block.timestamp <= round.currentPhaseStartTime + REVEAL_DURATION, "Reveal phase is over");
 
         require(round.hasCommitted[msg.sender], "Member did not commit");
         require(!round.hasRevealed[msg.sender], "Member has already revealed");
 
         bytes32 commitment = round.commitments[msg.sender];
-        bytes32 calculatedHash = keccak256(abi.encodePacked(_value, _salt));
+        //bytes32 calculatedHash = keccak256(abi.encodePacked(_value, _salt));
+        bytes32 calculatedHash = optimizedHash(_value, _salt);
 
         require(calculatedHash == commitment, "Invalid reveal, hash mismatch");
 
@@ -166,7 +181,7 @@ contract RandomCommittee {
     // --- Finalize round, calculate combined value (the beacon value) and start with next round ---
     function finalizeRound(uint256 _roundId) external inPhase(_roundId, Phase.Reveal) onlyOwner {
         Round storage round = rounds[_roundId];
-        require(block.timestamp > round.currentPhaseStartTime + revealDuration, "Reveal phase not yet over");
+        require(block.timestamp > round.currentPhaseStartTime + REVEAL_DURATION, "Reveal phase not yet over");
 
         require(!round.isFinalized, "Round already finalized");
 
@@ -175,8 +190,8 @@ contract RandomCommittee {
 
         // We check each commmittee member whether it acted correctly.
         // We iterate from back to front of the array because of the efficient way we remove dishonest members (using pop())
-        for (int256 i = int256(round.committeeMembers.length) - 1; i >= 0; i--) {
-            address member = round.committeeMembers[uint256(i)];
+        for (uint256 i = uint256(round.committeeMembers.length) - 1; i >= 0; i--) {
+            address member = round.committeeMembers[i];
 
             // 1. Active member did not commit
             if (!round.hasCommitted[member]) {
@@ -188,7 +203,8 @@ contract RandomCommittee {
             }
             // 3. Member participated correctly
             else {
-                combinedValue = keccak256(abi.encodePacked(combinedValue, round.revealedValues[member]));
+                // combinedValue = keccak256(abi.encodePacked(combinedValue, round.revealedValues[member]));
+                combinedValue = optimizedHash(combinedValue, round.revealedValues[member]);
                 participants++;
             }
         }
@@ -247,5 +263,13 @@ contract RandomCommittee {
 
     function isRoundFinalized(uint256 roundId) external view returns (bool) {
         return rounds[roundId].isFinalized;
+    }
+
+    function optimizedHash(bytes32 a, bytes32 b) internal pure returns (bytes32 hashedVal) {
+        assembly {
+            mstore(0x00, a)
+            mstore(0x20, b)
+            hashedVal := keccak256(0x00, 0x40)
+        }
     }
 }

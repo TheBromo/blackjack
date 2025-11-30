@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./RandomCommittee.sol";
+import "./RandomCommittee.sol" as RC;
 
 /**
  * @title Blackjack
@@ -9,8 +9,8 @@ import "./RandomCommittee.sol";
  *         Max 5 players, standard blackjack rules
  */
 contract Blackjack {
-    RandomCommittee public immutable rng;
-    address payable public immutable treasury;
+    RC.RandomCommittee public immutable RNG;
+    address payable public immutable TREASURY;
 
     uint8 public constant MAX_PLAYERS = 7;
     uint256 public constant FEE_PERCENT = 5; // 5%
@@ -86,19 +86,27 @@ contract Blackjack {
     error NoPlayers();
 
     modifier onlyHouse() {
-        if (msg.sender != house) revert OnlyHouseAllowed();
+        _onlyHouse();
         _;
+    }
+
+    function _onlyHouse() internal view {
+        if (msg.sender != house) revert OnlyHouseAllowed();
     }
 
     modifier inState(GameState _state, uint256 _gameId) {
-        require(games[_gameId].state == _state, "Invalid phase");
+        _inState(_state, _gameId);
         _;
     }
 
-    constructor(address payable _treasury, RandomCommittee _rng) {
+    function _inState(GameState _state, uint256 _gameId) internal view {
+        require(games[_gameId].state == _state, "Invalid phase");
+    }
+
+    constructor(address payable _treasury, RC.RandomCommittee _rng) {
         house = msg.sender;
-        treasury = _treasury;
-        rng = _rng;
+        TREASURY = _treasury;
+        RNG = _rng;
         currentGameId = 0;
     }
 
@@ -119,7 +127,6 @@ contract Blackjack {
         if (game.players.length >= MAX_PLAYERS) revert GameFull();
         if (msg.value < MIN_BET || msg.value > MAX_BET) revert InvalidBet();
         if (game.isPlayer[msg.sender]) revert AlreadyJoined();
-        //TODO: verify if could pay all players
 
         uint256 fee = (msg.value * FEE_PERCENT) / 100;
         uint256 betAmount = msg.value - fee;
@@ -128,7 +135,7 @@ contract Blackjack {
             "bet to high, could not be paid when hitting black jack. Place lower bet"
         );
 
-        (bool success,) = treasury.call{value: msg.value}("");
+        (bool success,) = TREASURY.call{value: msg.value}("");
         require(success, "Slash transfer failed");
 
         game.players.push();
@@ -147,7 +154,7 @@ contract Blackjack {
         for (uint256 i = 0; i < game.players.length; i++) {
             committee[i] = game.players[i].addr;
         }
-        uint256 rngId = rng.createRound(committee);
+        uint256 rngId = RNG.createRound(committee);
         game.state = GameState.COMMITTED;
         game.rngRoundId = rngId;
         emit CommitCountdownStart(gameId, rngId);
@@ -159,7 +166,7 @@ contract Blackjack {
 
     function deal(uint256 gameId) external onlyHouse inState(GameState.COMMITTED, gameId) {
         Game storage game = games[gameId];
-        require(rng.isRoundFinalized(game.rngRoundId), "Random committee must finish before continuing");
+        require(RNG.isRoundFinalized(game.rngRoundId), "Random committee must finish before continuing");
 
         game.state = GameState.DEALING;
 
@@ -252,13 +259,13 @@ contract Blackjack {
     function _drawCard(uint256 gameId) internal returns (Card memory) {
         Game storage game = games[gameId];
 
-        bytes32 seed = rng.finalRandomValue(game.rngRoundId);
+        bytes32 seed = RNG.finalRandomValue(game.rngRoundId);
         uint256 rand = uint256(keccak256(abi.encodePacked(seed, ++game.cardCount)));
 
         uint8 value = uint8((rand % 13) + 1); // 1-13
         uint8 suit = uint8((rand / 13) % 4); // 0-3
 
-        return Card(value, suit);
+        return Card({value: value, suit: suit});
     }
 
     function _updateHandTotal(Hand storage hand, Card memory card) internal {
@@ -375,7 +382,7 @@ contract Blackjack {
             PlayerState storage player = game.players[i];
             payout += player.bet + (player.bet * 3) / 2;
         }
-        return payout + newBet <= treasury.balance;
+        return payout + newBet <= TREASURY.balance;
     }
 
     function getPlayerHand(uint256 gameId, address player) external view returns (Card[] memory cards, uint8 total) {

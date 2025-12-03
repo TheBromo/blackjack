@@ -2,16 +2,18 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/RandomCommittee.sol";
+import "../src/CommitRevealRandom.sol";
 
-contract RandomCommitteeTest is Test {
-    RandomCommittee rc;
+contract CommitRevealRandomTest is Test {
+    CommitRevealRandom crr;
 
     address alice = address(0xA);
     address bob = address(0xB);
+    uint256 commitduration = 30;
+    uint256 revealduration = 30;
 
     function setUp() public {
-        rc = new RandomCommittee(); // msg.sender is owner
+        crr = new CommitRevealRandom(); // msg.sender is owner
         alice = address(0xA);
         bob = address(0xB);
     }
@@ -22,14 +24,7 @@ contract RandomCommitteeTest is Test {
         committee[0] = alice;
         committee[1] = bob;
         // Owner creates round
-        uint256 roundId = rc.createRound(committee);
-
-        // === JOIN ===
-        vm.prank(alice);
-        rc.join(roundId);
-
-        vm.prank(bob);
-        rc.join(roundId);
+        uint256 roundId = crr.createRound(committee, commitduration, revealduration);
 
         // Prepare commit/reveal values
         bytes32 aliceSalt = keccak256("A");
@@ -45,25 +40,24 @@ contract RandomCommitteeTest is Test {
 
         // — Commit —
         vm.prank(alice);
-        rc.commit(roundId, aliceCommit);
+        crr.commit(roundId, aliceCommit);
 
         vm.prank(bob);
-        rc.commit(roundId, bobCommit);
+        crr.commit(roundId, bobCommit);
 
         // Advance past commit + delay
-        vm.warp(block.timestamp + 20);
-        rc.startRevealPhase(roundId);
+        vm.warp(block.timestamp + commitduration);
 
         // — Reveal —
         vm.prank(alice);
-        rc.reveal(roundId, aliceValue, aliceSalt);
+        crr.reveal(roundId, aliceValue, aliceSalt);
 
         vm.prank(bob);
-        rc.reveal(roundId, bobValue, bobSalt);
+        crr.reveal(roundId, bobValue, bobSalt);
 
-        vm.warp(block.timestamp + 20);
-        rc.finalizeRound(roundId);
+        vm.warp(block.timestamp + revealduration);
+        crr.finalizeRandomness(roundId);
 
-        assertTrue(rc.isRoundFinalized(roundId));
+        assertTrue(crr.isFinalized(roundId));
     }
 }

@@ -60,7 +60,7 @@ contract CommitReveal2 {
     bytes32 public omega_v; // Intermediate randomness
     bytes32 public omega_o; // Final randomness
 
-    address public registrar;
+    address public immutable registrar;
 
     // ==========================================
     // Events
@@ -91,8 +91,8 @@ contract CommitReveal2 {
     // Constructor
     // ==========================================
 
-    constructor(uint256 _commitDuration, uint256 _reveal1Duration) {
-        registrar = msg.sender;
+    constructor(uint256 _commitDuration, uint256 _reveal1Duration, address controller) {
+        registrar = controller;
         COMMIT_DURATION = _commitDuration;
         REVEAL_DURATION = _reveal1Duration;
     }
@@ -101,13 +101,17 @@ contract CommitReveal2 {
         rounds[id].isPermitted[participant] = true;
     }
 
-    function start() external onlyRegistrar {
-        commitEndTime = block.timestamp + COMMIT_DURATION;
-        reveal1EndTime = commitEndTime + REVEAL_DURATION;
-    }
-
     function reset() external onlyRegistrar {
         id++;
+        commitEndTime = block.timestamp + COMMIT_DURATION;
+        reveal1EndTime = commitEndTime + REVEAL_DURATION;
+
+        currentRevealIndex = 0;
+        lastTurnActionTime = 0;
+
+        omega_v = 0; // Intermediate randomness
+        omega_o = 0; // Final randomness
+        delete revealOrder;
     }
 
     // ==========================================
@@ -142,6 +146,7 @@ contract CommitReveal2 {
         require(msg.value >= MIN_DEPOSIT, "Insufficient deposit");
         require(!rounds[id].participants[msg.sender].registered, "Already registered");
         require(rounds[id].isPermitted[msg.sender], "not added");
+        require(_cv != 0, "cv cant be 0");
 
         rounds[id].participants[msg.sender] = Participant({
             registered: true,
@@ -167,9 +172,12 @@ contract CommitReveal2 {
      */
     function reveal1(bytes32 _co) external inPhase(Phase.Reveal1) {
         Participant storage p = rounds[id].participants[msg.sender];
-        require(p.registered, "Not a participant");
+        require(rounds[id].isPermitted[msg.sender], "not added");
+        require(rounds[id].participants[msg.sender].registered, "not registered");
         require(!p.revealed1, "Already revealed phase 1");
 
+        require(_co != 0, "co cant be 0");
+        require(p.cv != 0, "cv cant be 0");
         // Verify: cv_i == H(co_i)
         require(keccak256(abi.encodePacked(_co)) == p.cv, "Invalid commitment reveal");
 
@@ -333,5 +341,23 @@ contract CommitReveal2 {
 
         omega_o = keccak256(concatenatedSecrets);
         emit RandomnessGenerated(omega_o);
+    }
+
+    function getParticipant() external view returns (Participant memory) {
+        return rounds[id].participants[msg.sender];
+    }
+
+    function getParticipantsAndDVals() external view returns (address[] memory addrs, uint256[] memory dVals) {
+        Round storage r = rounds[id];
+        uint256 len = r.participantList.length;
+
+        addrs = new address[](len);
+        dVals = new uint256[](len);
+
+        for (uint256 i = 0; i < len; i++) {
+            address participantAddr = r.participantList[i];
+            addrs[i] = participantAddr;
+            dVals[i] = r.participants[participantAddr].dVal;
+        }
     }
 }

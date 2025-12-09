@@ -10,7 +10,7 @@ contract Setup {
 
     uint256 constant MAX_PARTICIPANTS = 5;
     //DURATION
-    uint256 public constant BETTING_DURATION = 120 seconds;
+    uint256 public constant BETTING_DURATION = 30 seconds;
     uint256 public constant CRR_DURATION = 120 seconds;
     uint256 public constant CHAIN_DURATION = 30 seconds;
     uint256 public constant CUT_DURATION = 30 seconds;
@@ -22,7 +22,7 @@ contract Setup {
 
     CR.CommitReveal2 public immutable cr;
 
-    enum SetupStage {
+    enum SetupPhase {
         BETTING,
         RNG,
         CHAIN,
@@ -39,7 +39,6 @@ contract Setup {
     struct GameSetup {
         uint256 playerCount;
         uint256 startTime;
-        SetupStage stage;
         Participant[] players;
         mapping(address => bool) isPlayer;
         mapping(address => bool) hasSubmitedCut;
@@ -48,13 +47,13 @@ contract Setup {
         bool cutApplied;
     }
     mapping(uint256 => GameSetup) public games;
-    uint256 id;
+    uint256 public id;
 
-    constructor(address feeAddr, address winAddr) {
+    constructor(address feeAddr, address winAddr, address controller) {
         FEE_RECEIVER = feeAddr;
         WINNING_DISTRIBUTOR = winAddr;
-        CONTROLLER = msg.sender;
-        cr = new CR.CommitReveal2(CRR_DURATION / 2, CRR_DURATION / 2);
+        CONTROLLER = controller;
+        cr = new CR.CommitReveal2(CRR_DURATION / 2, CRR_DURATION / 2, address(this));
     }
 
     modifier onlyParticipant() {
@@ -66,12 +65,12 @@ contract Setup {
         require(games[id].isPlayer[msg.sender], "only player allowed");
     }
     modifier onlyController() {
-        _onlyHouse();
+        _onlyController();
         _;
     }
 
     function _onlyController() internal view {
-        require(msg.sender != CONTROLLER, "only controller allowed");
+        require(msg.sender == CONTROLLER, "only controller allowed");
     }
     modifier onlyHouse() {
         _onlyHouse();
@@ -79,50 +78,31 @@ contract Setup {
     }
 
     function _onlyHouse() internal view {
-        require(msg.sender != FEE_RECEIVER, "only house allowed");
+        require(msg.sender == FEE_RECEIVER, "only house allowed");
     }
-    modifier timedTransition() {
-        _timedTransition();
+
+    modifier atPhase(SetupPhase _phase) {
+        _atPhase(_phase);
         _;
     }
 
-    function _timedTransition() internal {
-        if (block.timestamp > games[id].startTime + BETTING_DURATION) {
-            games[id].stage = SetupStage.RNG;
-        } else if (block.timestamp <= games[id].startTime + BETTING_DURATION + CRR_DURATION) {
-            games[id].stage = SetupStage.CHAIN;
-        } else if (block.timestamp <= games[id].startTime + BETTING_DURATION + CRR_DURATION + CHAIN_DURATION) {
-            games[id].stage = SetupStage.CUT;
-        } else if (
-            block.timestamp <= games[id].startTime + BETTING_DURATION + CRR_DURATION + CHAIN_DURATION + CUT_DURATION
-        ) {
-            games[id].stage = SetupStage.CUTCHAIN;
-        }
-    }
-
-    modifier atStage(SetupStage _stage) {
-        _atStage(_stage);
-        _;
-    }
-
-    function _atStage(SetupStage _stage) internal view {
-        require(games[id].stage == _stage, "not at stage");
+    function _atPhase(SetupPhase _phase) internal view {
+        require(getPhase() == _Phase, "not at phase");
     }
 
     function start(uint256 _id) external onlyController {
         id = _id;
-        games[id].stage = SetupStage.BETTING;
         games[id].startTime = block.timestamp;
         cr.reset();
         cr.register(FEE_RECEIVER);
     }
 
-    function bet() external payable timedTransition atStage(SetupStage.BETTING) {
+    function bet() external payable atPhase(SetupPhase.BETTING) {
         GameSetup storage game = games[id];
         require(game.playerCount < MAX_PARTICIPANTS, "Game full");
         require(!game.isPlayer[msg.sender], "Player has already joined");
         require(msg.value >= MIN_BET && msg.value <= MAX_BET, "Bet to high");
-        require(block.timestamp <= games[id].startTime + BETTING_DURATION, "Betting stage over");
+        require(block.timestamp <= games[id].startTime + BETTING_DURATION, "Betting phase over");
 
         game.players.push();
         game.playerCount++;
@@ -139,19 +119,30 @@ contract Setup {
         game.isPlayer[msg.sender] = true;
     }
 
-    function submitChain(bytes32 _anchor) external onlyHouse timedTransition atStage(SetupStage.CHAIN) {
+    function submitChain(bytes32 _anchor) external onlyHouse atPhase(SetupPhase.CHAIN) {
+        require(_anchor != 0, "_anchor cannot be 0");
         GameSetup storage game = games[id];
-        game.anchor = _anchor;
+
+        for (uint256 i = 0; i < game.players.length; i++) {
+            game.players[i].isSlashed = true;
+        }
+        games[id].anchor = _anchor;
     }
 
-    function submitCut(uint256 amount) external onlyParticipant timedTransition atStage(SetupStage.CUT) {
+    function submitCut(uint256 amount) external onlyParticipant atPhase(SetupPhase.CUT) {
         require(amount >= 0 && amount < 10, "cut to big or small");
         GameSetup storage game = games[id];
 
         game.cut += amount;
+
+        for (uint256 i = 0; i < game.players.length; i++) {
+            if (game.players[i].addr == msg.sender) {
+                game.players[i].isSlashed = true;
+            }
+        }
     }
 
-    function revealCutChain(bytes32 _newAnchor) external onlyHouse atStage(SetupStage.CUTCHAIN) {
+    function revealCutChain(bytes32 _newAnchor) external onlyHouse atPhase(SetupPhase.CUTCHAIN) {
         GameSetup storage game = games[id];
         require(!game.cutApplied, "already cut");
 
@@ -163,11 +154,6 @@ contract Setup {
         require(tempHash == game.anchor, "Invalid Cut Proof");
         game.anchor = _newAnchor;
         game.cutApplied = true;
-    }
-
-    function anchor() public view returns (bytes32) {
-        GameSetup storage game = games[id];
-        return game.anchor;
     }
 
     function participants() public view returns (address[] memory) {
@@ -196,7 +182,58 @@ contract Setup {
         return _participant;
     }
 
+    function playerCount() public view returns (uint256) {
+        return games[id].players.length;
+    }
+
+    function getCut() public view returns (uint256) {
+        return games[id].cut;
+    }
+
     function maxBet() public view returns (uint256) {
         return (uint256(payable(WINNING_DISTRIBUTOR).balance) * 9) / (10 * MAX_PARTICIPANTS);
+    }
+
+    function getStartTime() public view returns (uint256) {
+        return games[id].startTime + BETTING_DURATION;
+    }
+
+    function currentTime() public view returns (uint256) {}
+
+    function getPhase() public view returns (SetupPhase phase) {
+        if (block.timestamp < games[id].startTime + BETTING_DURATION) {
+            return SetupPhase.BETTING;
+        } else if (block.timestamp < games[id].startTime + BETTING_DURATION + CRR_DURATION) {
+            return SetupPhase.RNG;
+        } else if (block.timestamp < games[id].startTime + BETTING_DURATION + CRR_DURATION + CHAIN_DURATION) {
+            return SetupPhase.CHAIN;
+        } else if (
+            block.timestamp < games[id].startTime + BETTING_DURATION + CRR_DURATION + CHAIN_DURATION + CUT_DURATION
+        ) {
+            return SetupPhase.CUT;
+        } else {
+            return SetupPhase.CUTCHAIN;
+        }
+    }
+
+    function getHouse() public view returns (address) {
+        return FEE_RECEIVER;
+    }
+
+    function evalHash(bytes32 _newAnchor) public view returns (bytes32) {
+        bytes32 tempHash = _newAnchor;
+        for (uint256 i = 0; i < games[id].cut; i++) {
+            tempHash = keccak256(abi.encodePacked(tempHash));
+        }
+        return tempHash;
+    }
+
+    function anchor() public view returns (bytes32) {
+        GameSetup storage game = games[id];
+        return game.anchor;
+    }
+
+    function getAnchor() public view returns (bytes32) {
+        return games[id].anchor;
     }
 }

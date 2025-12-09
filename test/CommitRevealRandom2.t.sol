@@ -55,7 +55,6 @@ contract CommitReveal2Test is Test {
         // ==========================================
         // 1. Commit Phase
         // ==========================================
-        cr2.start();
 
         vm.prank(alice);
         cr2.commit{value: 0.1 ether}(cvAlice);

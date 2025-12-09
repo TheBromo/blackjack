@@ -10,6 +10,7 @@ import "./BlackjackHelper.sol" as bh;
  */
 contract Blackjack {
     address payable public immutable HOUSE;
+    address payable public immutable CONTROLLER;
 
     uint256 public immutable ROUND_DURATION = 120 seconds;
     error OnlyHouseAllowed();
@@ -48,7 +49,7 @@ contract Blackjack {
         uint256 playerCount;
         uint256 roundId;
         uint256 cardCount;
-        Stages stage;
+        Phase phase;
         mapping(address => bool) isPlayer;
         PlayerState[] players;
         Hand dealerHand;
@@ -58,15 +59,25 @@ contract Blackjack {
     mapping(uint256 => Game) public games;
     uint256 public gameId;
 
-    enum Stages {
+    enum Phase {
         DEAL_CARDS,
         PLAYER_ROUND,
         DEALER_ROUND,
         FINISHED
     }
 
-    constructor() {
+    constructor(address controller) {
         HOUSE = payable(msg.sender);
+        CONTROLLER = payable(controller);
+    }
+
+    modifier onlyCtl() {
+        _onlyCtl();
+        _;
+    }
+
+    function _onlyCtl() internal view {
+        if (msg.sender != CONTROLLER) revert OnlyHouseAllowed();
     }
 
     modifier onlyHouse() {
@@ -87,36 +98,36 @@ contract Blackjack {
         require(games[gameId].isPlayer[msg.sender], "is not a player");
     }
 
-    modifier atStage(Stages _stage) {
-        _atStage(_stage);
+    modifier atPhase(Phase _phase) {
+        _atPhase(_phase);
         _;
     }
 
-    function _atStage(Stages _stage) internal view {
-        require(games[gameId].stage == _stage);
+    function _atPhase(Phase _phase) internal view {
+        require(games[gameId].phase == _phase);
     }
 
-    modifier atStages(Stages[] memory stages) {
-        _atStages(stages);
+    modifier atPhases(Phase[] memory phases) {
+        _atPhases(phases);
         _;
     }
 
-    function _atStages(Stages[] memory stages) internal view {
-        Stages current = games[gameId].stage;
+    function _atPhases(Phase[] memory phases) internal view {
+        Phase current = games[gameId].phase;
         bool allowed = false;
 
-        for (uint256 i = 0; i < stages.length; i++) {
-            if (current == stages[i]) {
+        for (uint256 i = 0; i < phases.length; i++) {
+            if (current == phases[i]) {
                 allowed = true;
                 break;
             }
         }
 
-        require(allowed, "Not allowed at this stage");
+        require(allowed, "Not allowed at this phase");
     }
     modifier transitionAfter() {
         _;
-        nextStage();
+        nextPhase();
     }
     modifier timedTransitions() {
         _timedTransitions();
@@ -125,23 +136,23 @@ contract Blackjack {
 
     function _timedTransitions() internal {
         if (
-            games[gameId].stage == Stages.PLAYER_ROUND
+            games[gameId].phase == Phase.PLAYER_ROUND
                 && block.timestamp >= games[gameId].phaseStartTime + ROUND_DURATION
         ) {
-            nextStage();
+            nextPhase();
         }
     }
 
-    function nextStage() internal {
-        games[gameId].stage = Stages(uint256(games[gameId].stage) + 1);
+    function nextPhase() internal {
+        games[gameId].phase = Phase(uint256(games[gameId].phase) + 1);
         games[gameId].phaseStartTime = block.timestamp;
     }
 
-    function createGame(address[] calldata players, bytes32 anchor) external timedTransitions onlyHouse {
+    function createGame(address[] calldata players, bytes32 anchor) external timedTransitions onlyCtl {
         gameId++;
         Game storage game = games[gameId];
         game.phaseStartTime = block.timestamp;
-        game.stage = Stages.DEAL_CARDS;
+        game.phase = Phase.DEAL_CARDS;
         game.anchor = anchor;
 
         for (uint256 i = 0; i < players.length; i++) {
@@ -154,7 +165,7 @@ contract Blackjack {
         emit GameCreated(gameId);
     }
 
-    function deal(bytes32 _newAnchor) external timedTransitions onlyHouse atStage(Stages.DEAL_CARDS) transitionAfter {
+    function deal(bytes32 _newAnchor) external timedTransitions onlyHouse atPhase(Phase.DEAL_CARDS) transitionAfter {
         Game storage game = games[gameId];
         require(keccak256(abi.encodePacked(_newAnchor)) == game.anchor, "new anchor is not in chain");
         game.anchor = _newAnchor;
@@ -176,11 +187,11 @@ contract Blackjack {
         game._dealCardToDealer(game.anchor); // visible
     }
 
-    function hit() external atStage(Stages.PLAYER_ROUND) onlyPlayer {
+    function hit() external atPhase(Phase.PLAYER_ROUND) onlyPlayer {
         emit PlayerAction("hit");
     }
 
-    function stand() external atStage(Stages.PLAYER_ROUND) onlyPlayer {
+    function stand() external atPhase(Phase.PLAYER_ROUND) onlyPlayer {
         // require(RNG.isFinalized(game.rngId), "Seed generation not finished");
         PlayerState storage player = _getPlayer(msg.sender);
         require(player.status == PlayerStatus.ACTIVE, "player must be still active");
@@ -189,7 +200,7 @@ contract Blackjack {
         emit PlayerAction("stand");
     }
 
-    function dealActions(bytes32 _newAnchor) external timedTransitions onlyHouse atStage(Stages.DEALER_ROUND) {
+    function dealActions(bytes32 _newAnchor) external timedTransitions onlyHouse atPhase(Phase.DEALER_ROUND) {
         Game storage game = games[gameId];
         // require(RNG.isFinalized(game.rngId), "Seed generation not finished");
         // uint256 seed = uint256(RNG.finalRandom(game.rngId));
@@ -202,7 +213,7 @@ contract Blackjack {
             while (game.dealerHand.total < 17) {
                 game._dealCardToDealer(game.anchor);
             }
-            nextStage();
+            nextPhase();
         } else {
             //deal to all players
             for (uint256 i = 0; i < game.players.length; i++) {
@@ -223,12 +234,25 @@ contract Blackjack {
                 while (game.dealerHand.total < 17) {
                     game._dealCardToDealer(game.anchor);
                 }
-                nextStage();
+                nextPhase();
             } else {
-                game.stage = Stages.PLAYER_ROUND;
+                game.phase = Phase.PLAYER_ROUND;
                 games[gameId].phaseStartTime = block.timestamp;
             }
         }
+    }
+
+    function allFinished(uint256 _id) public view returns (bool) {
+        Game storage game = games[_id];
+        if (game.players.length == 0) {
+            return false;
+        }
+        bool _allFinished = true;
+        for (uint256 i = 0; i < game.players.length; i++) {
+            PlayerState storage player = game.players[i];
+            _allFinished = _allFinished && (player.status != PlayerStatus.ACTIVE);
+        }
+        return _allFinished && game.phase == Phase.FINISHED;
     }
 
     function allFinished() public view returns (bool) {
@@ -239,7 +263,7 @@ contract Blackjack {
             PlayerState storage player = game.players[i];
             _allFinished = _allFinished && (player.status != PlayerStatus.ACTIVE);
         }
-        return _allFinished;
+        return _allFinished && game.phase == Phase.FINISHED;
     }
 
     function _getPlayer(address player) internal view returns (PlayerState storage) {
@@ -252,8 +276,8 @@ contract Blackjack {
         revert("Player not found");
     }
 
-    function _stages(Stages a, Stages b) internal pure returns (Stages[] memory s) {
-        s = new Stages[](2);
+    function _phases(Phase a, Phase b) internal pure returns (Phase[] memory s) {
+        s = new Phase[](2);
         s[0] = a;
         s[1] = b;
     }
@@ -270,13 +294,13 @@ contract Blackjack {
             uint256 playerCount,
             uint256 roundId,
             uint256 cardCount,
-            Stages stage,
+            Phase phase,
             bytes32 anchor
         )
     {
         Game storage game = games[id];
 
-        return (game.phaseStartTime, game.playerCount, game.roundId, game.cardCount, game.stage, game.anchor);
+        return (game.phaseStartTime, game.playerCount, game.roundId, game.cardCount, game.phase, game.anchor);
     }
 
     function getAllPlayerResolveViews(uint256 id)
@@ -355,7 +379,7 @@ contract Blackjack {
         return games[id].players.length;
     }
 
-    function getStage(uint256 id) external view returns (Stages) {
-        return games[id].stage;
+    function getPhase(uint256 id) external view returns (Phase) {
+        return games[id].phase;
     }
 }

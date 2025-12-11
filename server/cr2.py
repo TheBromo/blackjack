@@ -2,43 +2,63 @@ from web3 import Web3
 import secrets
 import time
 
-def waitForStage(constract,phase, name,wait=5,debug=False):
+def waitForStage(constract,_phase, name,wait=5,debug=False):
     while True:
         phase = constract.functions.getPhase().call()
         if debug:
             print(phase)
-        if phase == 0:  # Phase.Reveal1
-            print(f"✅ Now in {name}!")
+        if phase >= _phase:
+            print(f"✅ Now in {name}!{_phase}<=id:{phase}")
             break
 
         print(f"⏳ Still waiting for {name}...")
         time.sleep(wait)
 
 
-def setupExec(setup,cr2,w3,user,registrar, salt):
+def setupExec(setup,cr2,ctl,w3,user,registrar, salt):
+    waitForStage(setup,0,"betting")
     waitForStage(setup,1,"rng")
+
+    count = setup.functions.playerCount().call()
+    if count == 0:
+        print("no players joined :(")
+        return
 
     random = crr(cr2,w3,user,registrar)
 
-    waitForStage(setup,2,"commit chain")
+    waitForStage(setup,2,"chain")
 
     chain = generate(random, salt)
+    print("chain length", len(chain))
 
-    tx_hash = setup.functions.submitChain(chain[-1]).transact({
-        "from": user.address
-    })
-    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+    print("submitting",chain[len(chain)-1])
+    tx_hash = setup.functions.submitChain(chain[len(chain)-1]).transact() #TODO: this fails
+    w3.eth.wait_for_transaction_receipt(tx_hash)
+
+    # waitForStage(setup,3,"cut ")
 
 
     waitForStage(setup,4,"cut chain")
 
     cut = setup.functions.getCut().call()
+    print("chain length -cut",len(chain[-cut]))
 
     val = setup.functions.evalHash(chain[len(chain)-1-cut]).call()
 
+    blkchain= setup.functions.anchor().call()
+    print("chain",chain[len(chain)-1])
+    print("blkchain",blkchain)
 
-    tx = setup.functions.revealCutChain(chain[len(chain)-1-cut]).transact()
+    for el in chain:
+        print(el)
+    chain = chain[:len(chain)-cut]
+    print("new chain",chain[len(chain)-1])
+
+    tx = setup.functions.revealCutChain(chain[len(chain)-1]).transact()
     w3.eth.wait_for_transaction_receipt(tx)
+
+    return chain, salt,random 
+
 
 
 def generate(random,salt):
@@ -69,17 +89,13 @@ def crr(cr2,w3,user,registrar):
     tx= cr2.functions.commit(cv).transact({
         "value": w3.to_wei(0.1, "ether")
     })
-
-    receipt = w3.eth.wait_for_transaction_receipt(tx)
-    if receipt["status"] == 0:
-        phase = cr2.functions.getPhase().call()
-        raise Exception("Commit tx reverted on-chain")
-
+    w3.eth.wait_for_transaction_receipt(tx)
+ 
     # ---------------------------------------------------------
     # 4. Wait for Reveal1 Phase (REAL TIME)
     # ---------------------------------------------------------
 
-    waitForStage(cr2,1,"reveal1")
+    waitForStage(cr2,1,"reveal1",debug=True, wait=10)
 
     # ---------------------------------------------------------
     # 5. Reveal1
@@ -98,27 +114,19 @@ def crr(cr2,w3,user,registrar):
     # 7. Submit Reveal Order (single user)
     # ---------------------------------------------------------
 
+    tx_hash = cr2.functions.calculateIntermediateValues().transact()
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+    print("Values calculated on-chain.")
+
     addresses, dvals = cr2.functions.getParticipantsAndDVals().call()
 
-    sorted_addresses = [
-        addr for addr, _ in sorted(
-            zip(addresses, dvals),
-            key=lambda x: x[1],
-            reverse=True
-        )
-    ]
-    sorted_participants = sorted(
-        zip(addresses, dvals),
-        key=lambda x: x[1],
-        reverse=True
-    )
-    print("\nParticipants sorted by dVal (descending):\n")
-    for addr, dval in sorted_participants:
-        print(f"{addr}  ->  dVal: {dval}")
+    participants = list(zip(addresses, dvals))
+    valid_participants = [p for p in participants if p[1] > 0]
 
-        print("Submitting reveal order...")
-
-    tx = cr2.functions.submitRevealOrder(sorted_addresses).transact()
+    sorted_participants = sorted(valid_participants, key=lambda x: x[1], reverse=True)
+    sorted_addresses_payload = [p[0] for p in sorted_participants]
+    print(f"Sorted {len(sorted_addresses_payload)} addresses for submission.")
+    tx = cr2.functions.submitRevealOrder(sorted_addresses_payload).transact()
     w3.eth.wait_for_transaction_receipt(tx)
 
     # ---------------------------------------------------------
@@ -130,6 +138,25 @@ def crr(cr2,w3,user,registrar):
     # ---------------------------------------------------------
     # 9. Reveal2
     # ---------------------------------------------------------
+
+    start_time = time.time()
+    timeout= cr2.functions.TURN_TIMEOUT().call()
+    while True:
+        current = cr2.functions.getCurrentRevealer().call()
+        print(current)
+        if user.address== current:  
+            print("your turn!")
+            break
+        elapsed = time.time() - start_time
+        if timeout > 30:
+            print("waiting too long")
+            try:
+                current = cr2.functions.skipStalledUser().transact()
+            except:
+                print("skip failed")
+
+        print(f"⏳ Still waiting for currenttltly waiting for{current}...")
+        time.sleep(5)
 
     print("Submitting Reveal2...")
     tx = cr2.functions.reveal2(s).transact()

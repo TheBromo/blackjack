@@ -1,5 +1,7 @@
 from web3 import Web3
 from cr2 import setupExec
+from game import gameExec
+from verify import verifyExec
 from web3.middleware import SignAndSendRawMiddlewareBuilder
 import time
 import os
@@ -53,6 +55,15 @@ cr2 = w3.eth.contract(address=cr2Addr, abi=abi)
 
 
 
+game_address = controller.functions.game().call()
+with open("./../out/Game.sol/Blackjack.json") as f:
+    artifact = json.load(f)
+abi = artifact["abi"]
+
+gameAddr= Web3.to_checksum_address(game_address)
+game = w3.eth.contract(address=gameAddr, abi=abi)
+
+
 
 PRIVATE_KEY_REGISTRAR = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80#os.environ["REGISTRAR_PK"]
 PRIVATE_KEY_USER      = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80#os.environ["USER_PK"]
@@ -67,24 +78,44 @@ receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
 salt = secrets.randbits(256)
 
+chain = []
+salt=0
+random=0
 while True:
+    id = controller.functions.roundId().call()
     phase = controller.functions.getPhase().call()
     print(phase)
     if phase == 0:
-        setupExec(setup,cr2,w3,user,registrar,salt)
+        print("--------------- in setup ")
+        try:
+            chain, salt, random = setupExec(setup,cr2,controller,w3,user,registrar,salt)
+            print("chain lent:",len(chain))
+            tx_hash = controller.functions.startGame().transact()
+            w3.eth.wait_for_transaction_receipt(tx_hash)
+        except  Exception as e:
+            print("setup failed :(", e)
+            tx_hash = controller.functions.reset().transact()
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
-        tx_hash = controller.functions.startGame().transact()
-        w3.eth.wait_for_transaction_receipt(tx_hash)
-
-        phase = controller.functions.getPhase().call()
-        print(phase)
     elif phase == 1:
-        print("gaming...")
-        #game
+        print("--------------- in game")
+        try:
+            gameExec(game,controller,w3,chain,salt,random)
+        except  Exception as e:
+            print("setup failed :(", e)
+            tx_hash = controller.functions.reset().transact()
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
     elif phase == 2:
-        #verify
-        pass
-    time.sleep(30)
+        print("--------------- in verify")
+        try:
+            verifyExec(game,controller,w3,chain,salt,id)
+        except  Exception as e:
+            print("setup failed :(", e)
+
+        tx_hash = controller.functions.reset().transact()
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+    time.sleep(5)
 
 
 

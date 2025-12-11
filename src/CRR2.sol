@@ -101,10 +101,11 @@ contract CommitReveal2 {
         rounds[id].isPermitted[participant] = true;
     }
 
-    function reset() external onlyRegistrar {
+    function reset(uint256 start) external onlyRegistrar {
         id++;
-        commitEndTime = block.timestamp + COMMIT_DURATION;
+        commitEndTime = start + COMMIT_DURATION;
         reveal1EndTime = commitEndTime + REVEAL_DURATION;
+        //TODO: betting info missing
 
         currentRevealIndex = 0;
         lastTurnActionTime = 0;
@@ -195,7 +196,7 @@ contract CommitReveal2 {
      * @notice Anyone can call this after Reveal1 time ends.
      * Computes Omega_v and d_i values for valid participants.
      */
-    function calculateIntermediateValues() internal {
+    function calculateIntermediateValues() public {
         bytes memory concatenatedCos;
 
         // 1. Calculate Omega_v from valid reveals only
@@ -215,13 +216,16 @@ contract CommitReveal2 {
         // 2. Calculate d_i for all participants
         // di = H(|Omega_v - cv_i|)
         uint256 omegaInt = uint256(omega_v);
+        require(omegaInt != 0, "omegaInt cannot be null");
 
         for (uint256 i = 0; i < rounds[id].participantList.length; i++) {
             Participant storage p = rounds[id].participants[rounds[id].participantList[i]];
             if (p.revealed1) {
                 uint256 cvInt = uint256(p.cv);
+                require(cvInt != 0, "p.cv cannot be null");
                 uint256 diff = omegaInt > cvInt ? omegaInt - cvInt : cvInt - omegaInt;
                 p.dVal = uint256(keccak256(abi.encodePacked(diff)));
+                require(p.dVal != 0, "p.cv cannot be null");
             }
         }
     }
@@ -268,15 +272,15 @@ contract CommitReveal2 {
         emit RevealOrderEstablished(count);
     }
 
-    // ==========================================
-    // 4. Reveal-2 Phase
-    // ==========================================
-
     /**
      * @notice Reveal final secret s_i. Must be done in order.
      */
     function reveal2(bytes32 _s) external inPhase(Phase.Reveal2) {
         require(currentRevealIndex < revealOrder.length, "All reveals processed");
+
+        if (block.timestamp >= lastTurnActionTime + TURN_TIMEOUT) {
+            skipStalledUser();
+        }
 
         address currentRevealer = revealOrder[currentRevealIndex];
         require(msg.sender == currentRevealer, "Not your turn");
@@ -304,7 +308,30 @@ contract CommitReveal2 {
     /**
      * @notice Liveness protection. If the current user sleeps, skip them.
      */
-    function skipStalledUser() external inPhase(Phase.Reveal2) {
+    function _skipStalledUser() internal inPhase(Phase.Reveal2) {
+        // if (block.timestamp <= lastTurnActionTime + TURN_TIMEOUT) {
+        //     return;
+        // }
+        //
+        // address stalledUser = revealOrder[currentRevealIndex];
+        //
+        // // Slash logic could go here (burn deposit, etc)
+        // // participants[stalledUser].deposit = 0;
+        //
+        // emit TurnSkipped(stalledUser);
+        //
+        // currentRevealIndex++;
+        // lastTurnActionTime = block.timestamp;
+        //
+        // if (currentRevealIndex == revealOrder.length) {
+        //     finalizeProtocol();
+        // }
+    }
+
+    /**
+     * @notice Liveness protection. If the current user sleeps, skip them.
+     */
+    function skipStalledUser() public inPhase(Phase.Reveal2) {
         require(currentRevealIndex < revealOrder.length, "Nothing to skip");
         require(block.timestamp > lastTurnActionTime + TURN_TIMEOUT, "Turn not timed out");
 
@@ -345,6 +372,10 @@ contract CommitReveal2 {
 
     function getParticipant() external view returns (Participant memory) {
         return rounds[id].participants[msg.sender];
+    }
+
+    function getCurrentRevealer() external view returns (address current) {
+        return revealOrder[currentRevealIndex];
     }
 
     function getParticipantsAndDVals() external view returns (address[] memory addrs, uint256[] memory dVals) {

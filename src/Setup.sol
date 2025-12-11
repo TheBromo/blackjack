@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "./CRR2.sol" as CR;
+import {console} from "forge-std/console.sol";
 
 contract Setup {
     address immutable FEE_RECEIVER;
@@ -13,7 +14,7 @@ contract Setup {
     uint256 public constant BETTING_DURATION = 30 seconds;
     uint256 public constant CRR_DURATION = 120 seconds;
     uint256 public constant CHAIN_DURATION = 30 seconds;
-    uint256 public constant CUT_DURATION = 30 seconds;
+    uint256 public constant CUT_DURATION = 40 seconds;
     uint256 public constant TOTAL_DURATION = CRR_DURATION + BETTING_DURATION + CHAIN_DURATION + CUT_DURATION;
     //BET
     uint256 public constant MAX_BET = 100 ether;
@@ -45,6 +46,7 @@ contract Setup {
         bytes32 anchor;
         uint256 cut;
         bool cutApplied;
+        bytes32 random;
     }
     mapping(uint256 => GameSetup) public games;
     uint256 public id;
@@ -87,17 +89,25 @@ contract Setup {
     }
 
     function _atPhase(SetupPhase _phase) internal view {
-        require(getPhase() == _Phase, "not at phase");
+        // if (getPhase() == _phase) {
+        //     // console.log("++++++++++++++++++++++++++++++ rejecting ++++++++++++++++++++++++++++++++++++");
+        //     // console.log(msg.sender, uint256(games[id].anchor));
+        // }
+        require(getPhase() == _phase, "not at phase ");
     }
 
     function start(uint256 _id) external onlyController {
+        // console.log("---------------------------------------------------------------");
+        // console.log("starting setup", msg.sender);
         id = _id;
         games[id].startTime = block.timestamp;
-        cr.reset();
+        cr.reset(games[id].startTime + BETTING_DURATION);
         cr.register(FEE_RECEIVER);
     }
 
     function bet() external payable atPhase(SetupPhase.BETTING) {
+        // console.log("---------------------------------------------------------------");
+        // console.log("betting", msg.sender);
         GameSetup storage game = games[id];
         require(game.playerCount < MAX_PARTICIPANTS, "Game full");
         require(!game.isPlayer[msg.sender], "Player has already joined");
@@ -120,34 +130,49 @@ contract Setup {
     }
 
     function submitChain(bytes32 _anchor) external onlyHouse atPhase(SetupPhase.CHAIN) {
+        // console.log("---------------------------------------------------------------");
         require(_anchor != 0, "_anchor cannot be 0");
+        // console.log("submitting chain", msg.sender);
         GameSetup storage game = games[id];
+        game.random = cr.omega_o();
+
+        // console.log("submitting chain", uint256(_anchor));
 
         for (uint256 i = 0; i < game.players.length; i++) {
             game.players[i].isSlashed = true;
         }
         games[id].anchor = _anchor;
+
+        // console.log("new anchor", uint256(games[id].anchor));
+        // console.log("id", id);
     }
 
     function submitCut(uint256 amount) external onlyParticipant atPhase(SetupPhase.CUT) {
+        // console.log("---------------------------------------------------------------");
+        // console.log("submitting cut", msg.sender);
         require(amount >= 0 && amount < 10, "cut to big or small");
         GameSetup storage game = games[id];
 
-        game.cut += amount;
-
         for (uint256 i = 0; i < game.players.length; i++) {
-            if (game.players[i].addr == msg.sender) {
-                game.players[i].isSlashed = true;
+            if (game.players[i].addr == msg.sender && game.players[i].isSlashed) {
+                game.players[i].isSlashed = false;
+                game.cut += amount;
             }
         }
+        // console.log("anchor", uint256(games[id].anchor));
+        // console.log("id", id);
     }
 
     function revealCutChain(bytes32 _newAnchor) external onlyHouse atPhase(SetupPhase.CUTCHAIN) {
+        // console.log("---------------------------------------------------------------");
+        // console.log("cutting chain", msg.sender);
         GameSetup storage game = games[id];
+        // console.log("anchor", uint256(games[id].anchor));
+        // console.log("id", id);
         require(!game.cutApplied, "already cut");
 
         bytes32 tempHash = _newAnchor;
-        for (uint256 i = 0; i < game.cut; i++) {
+        for (uint256 i = 0; i < games[id].cut; i++) {
             tempHash = keccak256(abi.encodePacked(tempHash));
         }
 
@@ -157,6 +182,8 @@ contract Setup {
     }
 
     function participants() public view returns (address[] memory) {
+        // console.log("---------------------------------------------------------------");
+        // console.log("viewing participants", msg.sender);
         GameSetup storage game = games[id];
 
         // First count how many are not slashed
@@ -194,24 +221,42 @@ contract Setup {
         return (uint256(payable(WINNING_DISTRIBUTOR).balance) * 9) / (10 * MAX_PARTICIPANTS);
     }
 
-    function getStartTime() public view returns (uint256) {
-        return games[id].startTime + BETTING_DURATION;
-    }
-
-    function currentTime() public view returns (uint256) {}
-
     function getPhase() public view returns (SetupPhase phase) {
+        // console.log("---------------------------------------------------------------");
+        // console.log(msg.sender, uint256(games[id].anchor));
+        // console.log("timestamp", block.timestamp);
         if (block.timestamp < games[id].startTime + BETTING_DURATION) {
             return SetupPhase.BETTING;
-        } else if (block.timestamp < games[id].startTime + BETTING_DURATION + CRR_DURATION) {
+        } else if (
+            block.timestamp
+                < games[id].startTime + BETTING_DURATION + CRR_DURATION + (cr.TURN_TIMEOUT() * playerCount())
+        ) {
+            // console.log("rng");
             return SetupPhase.RNG;
-        } else if (block.timestamp < games[id].startTime + BETTING_DURATION + CRR_DURATION + CHAIN_DURATION) {
+        } else if (
+            block.timestamp
+                < games[id].startTime + BETTING_DURATION + CRR_DURATION + CHAIN_DURATION
+                    + (cr.TURN_TIMEOUT() * playerCount())
+        ) {
+            // console.log(
+            //     games[id].startTime + BETTING_DURATION + CRR_DURATION + CHAIN_DURATION
+            //         + (cr.TURN_TIMEOUT() * playerCount())
+            // );
+            // console.log("chain");
             return SetupPhase.CHAIN;
         } else if (
-            block.timestamp < games[id].startTime + BETTING_DURATION + CRR_DURATION + CHAIN_DURATION + CUT_DURATION
+            block.timestamp
+                < games[id].startTime + BETTING_DURATION + CRR_DURATION + CHAIN_DURATION + CUT_DURATION
+                    + (cr.TURN_TIMEOUT() * playerCount())
         ) {
+            // console.log(
+            //     games[id].startTime + BETTING_DURATION + CRR_DURATION + CHAIN_DURATION + CUT_DURATION
+            //         + (cr.TURN_TIMEOUT() * playerCount())
+            // );
+            // console.log("cut");
             return SetupPhase.CUT;
         } else {
+            // console.log("cutchain");
             return SetupPhase.CUTCHAIN;
         }
     }
@@ -221,6 +266,8 @@ contract Setup {
     }
 
     function evalHash(bytes32 _newAnchor) public view returns (bytes32) {
+        // console.log("---------------------------------------------------------------");
+        // console.log("eval hash", msg.sender);
         bytes32 tempHash = _newAnchor;
         for (uint256 i = 0; i < games[id].cut; i++) {
             tempHash = keccak256(abi.encodePacked(tempHash));
@@ -229,11 +276,19 @@ contract Setup {
     }
 
     function anchor() public view returns (bytes32) {
+        // console.log("---------------------------------------------------------------");
+        // console.log("getting anchor", msg.sender);
         GameSetup storage game = games[id];
         return game.anchor;
     }
 
     function getAnchor() public view returns (bytes32) {
+        // console.log("---------------------------------------------------------------");
+        // console.log("getting anchor", msg.sender);
         return games[id].anchor;
+    }
+
+    function getFinalRandom() external view returns (bytes32) {
+        return games[id].random;
     }
 }

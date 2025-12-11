@@ -2,7 +2,10 @@ from web3 import Web3
 # from cr2 import setupExec
 from web3.middleware import SignAndSendRawMiddlewareBuilder
 import os
+import time
 from setup import setupExec 
+from game import gameExec 
+from verify import verifyExec 
 
 
 
@@ -12,16 +15,16 @@ def main():
     w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
     assert w3.is_connected(), "Node is not running!"
 
-    house_account = w3.eth.account.from_key(CLIENT_PRIVATE_KEY)
-    HOUSE_ADDRESS = house_account.address
+    client_account = w3.eth.account.from_key(CLIENT_PRIVATE_KEY)
+    CLIENT_ADDRESS = client_account.address
 
-    print("HOUSE address:", HOUSE_ADDRESS)
+    print("Client address:", CLIENT_ADDRESS)
 
     w3.middleware_onion.inject(
-        SignAndSendRawMiddlewareBuilder.build(house_account),
+        SignAndSendRawMiddlewareBuilder.build(client_account),
         layer=0
     )
-    w3.eth.default_account = house_account.address
+    w3.eth.default_account = client_account.address
     # Load contract ABI + address
     import json
 
@@ -49,29 +52,60 @@ def main():
     cr2Addr= Web3.to_checksum_address(cr2_address)
     cr2 = w3.eth.contract(address=cr2Addr, abi=abi)
 
+    game_address = controller.functions.game().call()
+    with open("./../out/Game.sol/Blackjack.json") as f:
+        artifact = json.load(f)
+    abi = artifact["abi"]
+
+    gameAddr= Web3.to_checksum_address(game_address)
+    game = w3.eth.contract(address=gameAddr, abi=abi)
+
+
+    joined = False
     while True:
+        id = controller.functions.roundId().call()
         phase = controller.functions.getPhase().call()
         print(phase)
-        if phase == 0:
-            setupExec(setup,cr2,w3)
+        if phase == 0 :
+            try:
+                setupExec(setup,cr2,w3,client_account,controller)
+                joined = True
+                waitForPhase(controller,1,"waiting for game phase")
+            except  Exception as e:
+                print("error :(", e)
+                joined = False
 
-            tx_hash = controller.functions.startGame().transact()
-            w3.eth.wait_for_transaction_receipt(tx_hash)
-
-            phase = controller.functions.getPhase().call()
-            print(phase)
-        elif phase == 1:
+        elif phase == 1 and joined:
             print("gaming...")
-            #game
-        elif phase == 2:
-            #verify
-            pass
-    time.sleep(30)
+            try:
+                gameExec(game,cr2,w3)
+            except  Exception as e:
+                print("error :(", e)
+        elif phase == 2 and joined:
+            print("verifying....")
+            try:
+                verifyExec(setup,cr2,w3,id)
+            except  Exception as e:
+                print("error :(", e)
+            joined = False
+
+        time.sleep(10)
 
 
 
 
 
+def waitForPhase(contract,_phase, name,wait=5,debug=False):
+    while True:
+        phase = contract.functions.getPhase().call()
+        if debug:
+            print(phase)
+        if phase >= _phase:
+            print(f"✅ Now in {name}!{_phase}<=id:{phase}")
+            break
+
+        print(f"⏳ Still waiting for {name}...")
+        time.sleep(wait)
 
 
 if __name__ == "__main__":

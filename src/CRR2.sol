@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+// import {console} from "forge-std/console.sol";
+
 /**
  * @title CommitReveal2
  * @dev Implementation of the Commit-Reveal^2 DRB Protocol
@@ -32,7 +34,7 @@ contract CommitReveal2 {
 
     uint256 public constant MIN_DEPOSIT = 0.1 ether;
     // Timeout to allow skipping a user who stalls Reveal2
-    uint256 public constant TURN_TIMEOUT = 30 seconds;
+    uint256 public constant TURN_TIMEOUT = 3 seconds;
     uint256 public immutable COMMIT_DURATION;
     uint256 public immutable REVEAL_DURATION;
 
@@ -98,6 +100,7 @@ contract CommitReveal2 {
     }
 
     function register(address participant) external onlyRegistrar {
+        // console.log("registering address", participant);
         rounds[id].isPermitted[participant] = true;
     }
 
@@ -148,6 +151,7 @@ contract CommitReveal2 {
         require(!rounds[id].participants[msg.sender].registered, "Already registered");
         require(rounds[id].isPermitted[msg.sender], "not added");
         require(_cv != 0, "cv cant be 0");
+        // console.log("comitting,.... ", msg.sender);
 
         rounds[id].participants[msg.sender] = Participant({
             registered: true,

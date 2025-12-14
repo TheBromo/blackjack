@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import "./CRR2.sol" as CR;
-import {console} from "forge-std/console.sol";
 
 contract Setup {
     address immutable FEE_RECEIVER;
@@ -11,10 +10,10 @@ contract Setup {
 
     uint256 constant MAX_PARTICIPANTS = 5;
     //DURATION
-    uint256 public constant BETTING_DURATION = 30 seconds;
-    uint256 public constant CRR_DURATION = 120 seconds;
-    uint256 public constant CHAIN_DURATION = 30 seconds;
-    uint256 public constant CUT_DURATION = 40 seconds;
+    uint256 public constant BETTING_DURATION = 3 seconds;
+    uint256 public constant CRR_DURATION = 12 seconds;
+    uint256 public constant CHAIN_DURATION = 3 seconds;
+    uint256 public constant CUT_DURATION = 6 seconds;
     uint256 public constant TOTAL_DURATION = CRR_DURATION + BETTING_DURATION + CHAIN_DURATION + CUT_DURATION;
     //BET
     uint256 public constant MAX_BET = 100 ether;
@@ -180,6 +179,36 @@ contract Setup {
         game.anchor = _newAnchor;
         game.cutApplied = true;
     }
+
+    // function getParticipants() public view returns (address[] memory) {
+    //     // console.log("---------------------------------------------------------------");
+    //     // console.log("viewing participants", msg.sender);
+    //     GameSetup storage game = games[id];
+    //
+    //     // First count how many are not slashed
+    //     uint256 count = 0;
+    //     for (uint256 i = 0; i < game.players.length; i++) {
+    //         if (!game.players[i].isSlashed) {
+    //             //&& game.players[i].addr != FEE_RECEIVER) {
+    //             count++;
+    //         }
+    //     }
+    //
+    //     // Create memory array of correct size
+    //     address[] memory _participant = new address[](count);
+    //
+    //     // Fill the array
+    //     uint256 index = 0;
+    //     for (uint256 i = 0; i < game.players.length; i++) {
+    //         if (!game.players[i].isSlashed) {
+    //             //&& game.players[i].addr != FEE_RECEIVER) {
+    //             _participant[index] = game.players[i].addr;
+    //             index++;
+    //         }
+    //     }
+    //
+    //     return _participant;
+    // }
 
     function participants() public view returns (address[] memory) {
         // console.log("---------------------------------------------------------------");

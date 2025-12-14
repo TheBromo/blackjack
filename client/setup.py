@@ -97,7 +97,7 @@ def crr(cr2,w3,addr):
                 print("skip failed")
 
         print(f"⏳ Still waiting for currenttltly waiting for{addr}...")
-        time.sleep(5)
+        time.sleep(1)
 
     print("Submitting Reveal2...")
     tx = cr2.functions.reveal2(s).transact()
@@ -110,7 +110,7 @@ def crr(cr2,w3,addr):
     return final_randomness 
 
 
-def waitForStage(contract,_phase, name,wait=5,debug=False):
+def waitForStage(contract,_phase, name,wait=1,debug=False):
     while True:
         phase = contract.functions.getPhase().call()
         if debug:

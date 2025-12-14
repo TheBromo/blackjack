@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "./Game.sol";
+import {console} from "forge-std/console.sol";
 
 contract Verify {
     struct Session {
@@ -17,37 +18,61 @@ contract Verify {
     mapping(uint256 => bool) sessionExists;
     uint256 id;
 
-    uint256 constant VERIFY_DURATION = 120 seconds;
+    uint256 constant VERIFY_DURATION = 12 seconds;
+    event DebugLog(string message, uint256 val);
+    event DebugBytes(string message, bytes32 val);
 
-    function verifyGame(uint256 _id, Blackjack _game, bytes32 initialRandom) external {
+    function verifyGame(uint256 _id, address _game, bytes32 initialRandom) external {
         id = _id;
-        sessionExists[id] = true;
-        Session storage session = sessions[id];
+        sessionExists[_id] = true;
+        Session storage session = sessions[_id];
         session.startTime = block.timestamp;
-        session.game = _game;
+        session.game = Blackjack(_game);
+        session.house = session.game.HOUSE();
 
-        session.finalAnchor = _game.getAnchor();
+        session.finalAnchor = session.game.getAnchor();
         session.initialRandom = initialRandom;
         session.payed = false;
     }
 
     function verifyAnchor(uint256 _id, bytes32 salt, uint256 length) external {
-        require(sessionExists[id], "session does not exist");
+        console.log("verifying anchor", sessionExists[_id]);
+
+        require(sessionExists[_id], "session does not exist");
+
+        console.log("sessoin exists", sessions[_id].startTime + VERIFY_DURATION >= block.timestamp);
+
         require(sessions[_id].startTime + VERIFY_DURATION >= block.timestamp, "verify period is over");
+
+        console.log("verify period not over", msg.sender == sessions[_id].house);
+
         require(msg.sender == sessions[_id].house, "only house allowed");
+
+        console.log("nto hopuse");
+
+        console.log(uint256(sessions[_id].initialRandom), uint256(salt));
+
         bytes32 tempHash = keccak256(abi.encodePacked(sessions[_id].initialRandom, salt));
+
+        console.log("first hash", uint256(tempHash));
+
+        console.log("length", length);
+
         for (uint256 i = 0; i < length; i++) {
             tempHash = keccak256(abi.encodePacked(tempHash));
+            console.log(uint256(tempHash));
         }
 
-        require(tempHash == sessions[id].finalAnchor, "final anchor does not match calulated one");
+        require(tempHash == sessions[_id].finalAnchor, "final anchor does not match calulated one");
+
+        console.log("hash matches");
+
         sessions[_id].anchorVerified = true;
     }
 
     function resolveGame(uint256 _id) external {
-        require(sessionExists[id], "session does not exist");
-        require(sessions[_id].startTime + VERIFY_DURATION >= block.timestamp, "verify period is over");
-        require(sessions[_id].startTime + VERIFY_DURATION < block.timestamp, "verify period has not started");
+        require(sessionExists[_id], "session does not exist");
+        require(sessions[_id].startTime + VERIFY_DURATION <= block.timestamp, "verify has not started");
         require(!sessions[_id].payed, "game can already be payed out");
         if (sessions[_id].anchorVerified) {
             _resolveGame(_id);

@@ -2,7 +2,7 @@ from web3 import Web3
 import secrets
 import time
 
-def waitForStage(constract,_phase, name,wait=5,debug=False):
+def waitForStage(constract,_phase, name,wait=1,debug=False):
     while True:
         phase = constract.functions.getPhase().call()
         if debug:
@@ -95,7 +95,7 @@ def crr(cr2,w3,user,registrar):
     # 4. Wait for Reveal1 Phase (REAL TIME)
     # ---------------------------------------------------------
 
-    waitForStage(cr2,1,"reveal1",debug=True, wait=10)
+    waitForStage(cr2,1,"reveal1" )
 
     # ---------------------------------------------------------
     # 5. Reveal1
@@ -148,7 +148,7 @@ def crr(cr2,w3,user,registrar):
             print("your turn!")
             break
         elapsed = time.time() - start_time
-        if timeout > 30:
+        if timeout > 5:
             print("waiting too long")
             try:
                 current = cr2.functions.skipStalledUser().transact()
@@ -156,7 +156,7 @@ def crr(cr2,w3,user,registrar):
                 print("skip failed")
 
         print(f"⏳ Still waiting for currenttltly waiting for{current}...")
-        time.sleep(5)
+        time.sleep(1)
 
     print("Submitting Reveal2...")
     tx = cr2.functions.reveal2(s).transact()

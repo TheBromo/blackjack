@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "./Game.sol";
 import "./EfficientHashLib.sol";
-import {console} from "forge-std/console.sol";
+// import {console} from "forge-std/console.sol";
 
 library Helper {
     // using Helper for Blackjack.Game;
@@ -14,7 +14,7 @@ library Helper {
     function _dealCardToPlayer(Blackjack.Game storage game, bytes32 seed, Blackjack.PlayerState storage player)
         internal
     {
-        console.log("deal card player");
+        // console.log("deal card player");
         Blackjack.Card memory card = _drawCard(game, seed);
         player.hand.cards.push(card);
         _updateHandTotal(player.hand, card);
@@ -22,7 +22,7 @@ library Helper {
     }
 
     function _dealCardToDealer(Blackjack.Game storage game, bytes32 seed) internal {
-        console.log("deal card dealer");
+        // console.log("deal card dealer");
         Blackjack.Card memory card = _drawCard(game, seed);
         game.dealerHand.cards.push(card);
         _updateHandTotal(game.dealerHand, card);
@@ -30,7 +30,7 @@ library Helper {
     }
 
     function _drawCard(Blackjack.Game storage game, bytes32 seed) internal returns (Blackjack.Card memory) {
-        console.log("draw card");
+        // console.log("draw card");
         uint256 rand = uint256(keccak256(abi.encodePacked(seed, ++game.cardCount)));
 
         uint8 value = uint8((rand % 13) + 1); // 1-13
@@ -40,7 +40,7 @@ library Helper {
     }
 
     function _updateHandTotal(Blackjack.Hand storage hand, Blackjack.Card memory card) internal {
-        console.log("update hand total");
+        // console.log("update hand total");
         uint8 cardValue;
 
         if (card.value == 1) {

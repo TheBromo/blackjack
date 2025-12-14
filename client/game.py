@@ -1,7 +1,7 @@
-import time
 from random import randrange
+import  time
 
-def waitForPhase(contract,_phase, name,wait=5,debug=False):
+def waitForPhase(contract,_phase, name,wait=1,debug=False):
     while True:
         phase = contract.functions.getPhase().call()
         if debug:
@@ -14,25 +14,31 @@ def waitForPhase(contract,_phase, name,wait=5,debug=False):
         time.sleep(wait)
 
 def gameExec(game,ctl,w3):
-    waitForPhase(game,1,"play_cards")
 
     while not game.functions.allFinished().call():
         waitForRound(game)
         print("player turn")
+        hasPlayed = game.functions.hasPlayed().call()
         action =randrange(0,2)
-        if action == 0:
+        if action == 0 and not hasPlayed:
             print("hit")
-            tx = game.functions.hit().transact()
-            w3.eth.wait_for_transaction_receipt(tx)
-            pass
-        else:
+            try:
+                tx = game.functions.hit().transact()
+                w3.eth.wait_for_transaction_receipt(tx)
+            except:
+                pass
+        elif not hasPlayed:
             print("stand")
-            tx = game.functions.stand().transact()
-            w3.eth.wait_for_transaction_receipt(tx)
-            pass
+            try:
+                tx = game.functions.stand().transact()
+                w3.eth.wait_for_transaction_receipt(tx)
+            except:
+                pass
+            return 
+        time.sleep(1)
 
 
 
 def waitForRound(game):
     while game.functions.playerRoundOver().call():
-        time.sleep(5)
+        time.sleep(1)

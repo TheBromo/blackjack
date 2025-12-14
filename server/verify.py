@@ -1,9 +1,8 @@
-
 import time
 
-def waitForPhase(contract,_phase, name,wait=5,debug=False):
+def waitForPhase(contract,_phase,id, name,wait=1,debug=False):
     while True:
-        phase = contract.functions.getPhase().call()
+        phase = contract.functions.getPhase(id).call()
         if debug:
             print(phase)
         if phase >= _phase:
@@ -13,17 +12,22 @@ def waitForPhase(contract,_phase, name,wait=5,debug=False):
         print(f"⏳ Still waiting for {name}...")
         time.sleep(wait)
 
-def verifyExec(verify,ctl,w3, chain,salt, id):
-    tx= ctl.functions.verifyGame().transact()
-    w3.eth.wait_for_transaction_receipt(tx)
+def verifyExec(verify,w3, chain,salt, id):
+    print("submitting anchor")
+    print(salt)
+    try:
+        print(id,salt.to_bytes(32, byteorder='big'),len(chain))
+        tx= verify.functions.verifyAnchor(id,salt.to_bytes(32, byteorder='big'),len(chain)).transact({
+            "gas": 1_000_000, })
+        receipt = w3.eth.wait_for_transaction_receipt(tx)
+        print(f"Transaction status: {receipt['status']} (1=Success, 0=Fail)")
 
-    tx= verify.functions.verifyAnchor(id,salt,len(chain)).transact()
-    w3.eth.wait_for_transaction_receipt(tx)
+    except:
+        print("failed verifying")
 
+    waitForPhase(verify,1,id, "waiting for resolving")
+    print("resolveing game anchor")
     tx= verify.functions.resolveGame(id).transact()
-    w3.eth.wait_for_transaction_receipt(tx)
+    receipt = w3.eth.wait_for_transaction_receipt(tx)
+    print(f"Transaction status: {receipt['status']} (1=Success, 0=Fail)")
 
-
-def waitForRound(game):
-    while not game.functions.playerRoundOver().call():
-        time.sleep(5)

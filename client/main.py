@@ -2,10 +2,9 @@ from web3 import Web3
 # from cr2 import setupExec
 from web3.middleware import SignAndSendRawMiddlewareBuilder
 import os
-import time
 from setup import setupExec 
 from game import gameExec 
-from verify import verifyExec 
+import time
 
 
 
@@ -65,7 +64,7 @@ def main():
     while True:
         id = controller.functions.roundId().call()
         phase = controller.functions.getPhase().call()
-        print(phase)
+        print("controller phase",phase)
         if phase == 0 :
             try:
                 setupExec(setup,cr2,w3,client_account,controller)
@@ -76,26 +75,28 @@ def main():
                 joined = False
 
         elif phase == 1 and joined:
-            print("gaming...")
             try:
+                print("gaming...")
                 gameExec(game,cr2,w3)
             except  Exception as e:
                 print("error :(", e)
+            waitForPhase(controller,2,"waiting  verify phase")
+            
         elif phase == 2 and joined:
             print("verifying....")
-            try:
-                verifyExec(setup,cr2,w3,id)
-            except  Exception as e:
-                print("error :(", e)
+            # try:
+            #     # verifyExec(setup,cr2,w3,id)
+            # except  Exception as e:
+            #     print("error :(", e)
             joined = False
 
-        time.sleep(10)
+        time.sleep(1)
 
 
 
 
 
-def waitForPhase(contract,_phase, name,wait=5,debug=False):
+def waitForPhase(contract,_phase, name,wait=1,debug=False):
     while True:
         phase = contract.functions.getPhase().call()
         if debug:

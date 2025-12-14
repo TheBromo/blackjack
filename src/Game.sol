@@ -2,7 +2,10 @@
 pragma solidity ^0.8.20;
 
 import "./BlackjackHelper.sol" as bh;
-import {console} from "forge-std/console.sol";
+
+import "./Controller.sol";
+
+// import {console} from "forge-std/console.sol";
 
 /**
  * @title Blackjack
@@ -13,7 +16,7 @@ contract Blackjack {
     address payable public immutable HOUSE;
     address payable public immutable CONTROLLER;
 
-    uint256 public immutable ROUND_DURATION = 40 seconds;
+    uint256 public immutable ROUND_DURATION = 4 seconds;
     event GameCreated(uint256 gameId);
     event PlayerAction(string action);
 
@@ -54,10 +57,12 @@ contract Blackjack {
         PlayerState[] players;
         Hand dealerHand;
         bytes32 anchor;
+        mapping(address => bool) hasPlayed;
     }
     using bh.Helper for Game;
     mapping(uint256 => Game) public games;
     uint256 public gameId;
+    BlackjackController ctl;
 
     enum Phase {
         DEAL_CARDS,
@@ -69,6 +74,7 @@ contract Blackjack {
     constructor(address house, address controller) {
         HOUSE = payable(house);
         CONTROLLER = payable(controller);
+        ctl = BlackjackController(controller);
     }
 
     modifier onlyCtl() {
@@ -135,7 +141,7 @@ contract Blackjack {
     }
 
     function _timedTransitions() internal {
-        console.log("time transtion");
+        // console.log("time transtion");
         if (
             games[gameId].phase == Phase.PLAYER_ROUND
                 && block.timestamp >= games[gameId].phaseStartTime + ROUND_DURATION
@@ -151,9 +157,11 @@ contract Blackjack {
     }
 
     function nextPhase() internal {
-        console.log("next phase");
+        // console.log(uint256(games[gameId].phase));
+        // console.log("next phase------------------------------------------");
         games[gameId].phase = Phase(uint256(games[gameId].phase) + 1);
         games[gameId].phaseStartTime = block.timestamp;
+        // console.log(uint256(games[gameId].phase));
     }
 
     function createGame(address[] calldata players, bytes32 anchor) external timedTransitions onlyCtl {
@@ -162,21 +170,28 @@ contract Blackjack {
         game.phaseStartTime = block.timestamp;
         game.phase = Phase.DEAL_CARDS;
         game.anchor = anchor;
+        // console.log("creating game...");
+        // console.log("house", HOUSE);
+        // console.log("players");
 
         for (uint256 i = 0; i < players.length; i++) {
-            game.players.push();
-            game.isPlayer[players[i]] = true;
-            game.players[i].addr = msg.sender;
-            console.log(players[i]);
-            console.log(game.players[i].addr);
-            game.players[i].status = PlayerStatus.ACTIVE;
+            if (players[i] != HOUSE) {
+                // console.log(i, players[i]);
+
+                game.players.push();
+                game.isPlayer[players[i]] = true;
+                game.players[i].addr = players[i];
+                // console.log(players[i]);
+                // console.log(game.players[i].addr);
+                game.players[i].status = PlayerStatus.ACTIVE;
+            }
         }
 
         emit GameCreated(gameId);
     }
 
     function deal(bytes32 _newAnchor) external timedTransitions onlyHouse atPhase(Phase.DEAL_CARDS) transitionAfter {
-        console.log("dealing card");
+        // console.log("dealing card");
         Game storage game = games[gameId];
         require(keccak256(abi.encodePacked(_newAnchor)) == game.anchor, "new anchor is not in chain");
         game.anchor = _newAnchor;
@@ -199,79 +214,78 @@ contract Blackjack {
     }
 
     function hit() external atPhase(Phase.PLAYER_ROUND) onlyPlayer {
+        PlayerState storage player = _getPlayer(msg.sender);
+        require(!games[gameId].hasPlayed[msg.sender], "has already played");
+        require(player.status == PlayerStatus.ACTIVE, "player must be still active");
+        // console.log("hit");
         emit PlayerAction("hit");
-        console.log("hit");
+
+        games[gameId].hasPlayed[msg.sender] = true;
     }
 
     function stand() external atPhase(Phase.PLAYER_ROUND) onlyPlayer {
-        console.log("stand");
         PlayerState storage player = _getPlayer(msg.sender);
+        require(!games[gameId].hasPlayed[msg.sender], "has already played");
+        // console.log("stand");
         require(player.status == PlayerStatus.ACTIVE, "player must be still active");
 
         player.status = PlayerStatus.STANDING;
+        games[gameId].hasPlayed[msg.sender] = true;
         emit PlayerAction("stand");
     }
 
     function dealActions(bytes32 _newAnchor) external timedTransitions onlyHouse atPhase(Phase.DEALER_ROUND) {
-        console.log("deal actions");
+        // console.log("deal actions");
         Game storage game = games[gameId];
-        // require(RNG.isFinalized(game.rngId), "Seed generation not finished");
-        // uint256 seed = uint256(RNG.finalRandom(game.rngId));
+
         //if all standing resolve
         require(keccak256(abi.encodePacked(_newAnchor)) == game.anchor, "new anchor is not in chain");
         game.anchor = _newAnchor;
         if (allFinished()) {
-            console.log("over");
+            // console.log("over -----------------------------------------------------------");
             // game._resolveGame(seed);
             // Dealer must hit on 16 or less, stand on 17+
             while (game.dealerHand.total < 17) {
                 game._dealCardToDealer(game.anchor);
             }
-            nextPhase();
+            games[gameId].phase = Phase.FINISHED;
+            games[gameId].phaseStartTime = block.timestamp;
         } else {
-            console.log("not over");
             //deal to all players
             for (uint256 i = 0; i < game.players.length; i++) {
                 PlayerState storage player = game.players[i];
                 if (player.status == PlayerStatus.ACTIVE) {
+                    // console.log("dealing to ", player.addr);
                     game._dealCardToPlayer(game.anchor, player);
+                    games[gameId].hasPlayed[player.addr] = false;
                 }
 
                 // Check for natural blackjack
-
-                console.log("--------------------------");
-                console.log("total", player.hand.total);
+                // console.log("--------------------------");
+                // console.log("total", player.hand.total);
                 if (player.hand.total == 21) {
+                    // console.log("blockjack .....");
+
                     player.status = PlayerStatus.BLACKJACK;
                 } else if (player.hand.total > 21) {
+                    // console.log("busted .....");
                     player.status = PlayerStatus.BUSTED;
                 }
+                // console.log("--------------------------");
             }
             if (allFinished()) {
-                console.log("over");
+                // console.log("over -----------------------------------------------------------");
                 while (game.dealerHand.total < 17) {
                     game._dealCardToDealer(game.anchor);
                 }
-                nextPhase();
+                games[gameId].phase = Phase.FINISHED;
+                games[gameId].phaseStartTime = block.timestamp;
             } else {
-                console.log("player round transition");
+                // console.log("player round transition");
                 game.phase = Phase.PLAYER_ROUND;
                 games[gameId].phaseStartTime = block.timestamp;
             }
         }
-    }
-
-    function allFinished(uint256 _id) public view returns (bool) {
-        Game storage game = games[_id];
-        if (game.players.length == 0) {
-            return false;
-        }
-        bool _allFinished = true;
-        for (uint256 i = 0; i < game.players.length; i++) {
-            PlayerState storage player = game.players[i];
-            _allFinished = _allFinished && (player.status != PlayerStatus.ACTIVE);
-        }
-        return _allFinished && game.phase == Phase.FINISHED;
     }
 
     function allFinished() public view returns (bool) {
@@ -284,8 +298,10 @@ contract Blackjack {
         for (uint256 i = 0; i < game.players.length; i++) {
             PlayerState storage player = game.players[i];
             _allFinished = _allFinished && (player.status != PlayerStatus.ACTIVE);
+            // console.log("check: ", player.addr, player.status != PlayerStatus.ACTIVE);
+            // console.log("allFinished(_id)", _allFinished);
         }
-        return _allFinished && game.phase == Phase.FINISHED;
+        return _allFinished;
     }
 
     function _getPlayer(address player) internal view returns (PlayerState storage) {
@@ -295,6 +311,7 @@ contract Blackjack {
                 return game.players[i];
             }
         }
+        // console.log("Player not found", player);
         revert("Player not found");
     }
 
@@ -407,5 +424,9 @@ contract Blackjack {
 
     function getAnchor() external view returns (bytes32) {
         return games[gameId].anchor;
+    }
+
+    function hasPlayed() external view returns (bool) {
+        return games[gameId].hasPlayed[msg.sender];
     }
 }

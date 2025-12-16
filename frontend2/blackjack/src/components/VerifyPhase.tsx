@@ -137,16 +137,15 @@ export const VerifyPhase: React.FC<Props> = ({ contracts, account }) => {
     };
 
     return (
-        <div className="text-center">
-            <h2 className="text-4xl mb-6">Verify Phase</h2>
-            <p className="mb-6 text-xl">{status}</p>
+        <div className="text-center max-w-2xl mx-auto">
+            <p className="mb-8 text-xl font-bold">{status}</p>
 
             {/* Final Hands Display */}
             <div className="mb-8">
                 {/* Dealer's Final Hand */}
-                <div className="mb-8">
-                    <h3 className="text-2xl mb-4">Dealer - Total: {dealerTotal}</h3>
-                    <div className="flex justify-center gap-2">
+                <div className="mb-12">
+                    <h3 className="text-3xl font-bold mb-4">Dealer</h3>
+                    <div className="flex justify-center gap-3 mb-2">
                         {dealerCards.length === 0 ? (
                             <div className="text-gray-400">No cards</div>
                         ) : (
@@ -159,12 +158,13 @@ export const VerifyPhase: React.FC<Props> = ({ contracts, account }) => {
                             ))
                         )}
                     </div>
+                    <p className="text-xl font-bold">Score: {dealerTotal}</p>
                 </div>
 
                 {/* Player's Final Hand */}
                 <div className="mb-8">
-                    <h3 className="text-2xl mb-4">You - Total: {playerTotal}</h3>
-                    <div className="flex justify-center gap-2">
+                    <h3 className="text-3xl font-bold mb-4">Your Hand</h3>
+                    <div className="flex justify-center gap-3 mb-2">
                         {playerCards.length === 0 ? (
                             <div className="text-gray-400">No cards</div>
                         ) : (
@@ -177,11 +177,21 @@ export const VerifyPhase: React.FC<Props> = ({ contracts, account }) => {
                             ))
                         )}
                     </div>
+                    {playerCards.length > 0 && (
+                        <div>
+                            <p className="text-xl font-bold mb-1">Score: {playerTotal}</p>
+                            <p className="text-blue-600 text-lg">Bet: 1 ETH</p>
+                        </div>
+                    )}
                 </div>
             </div>
 
             {!autoVerifying && (
-                <button onClick={handleManualVerify} disabled={loading}>
+                <button
+                    onClick={handleManualVerify}
+                    disabled={loading}
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-xl border-4 border-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
                     Manual Verify Game
                 </button>
             )}

@@ -11,29 +11,23 @@ export const Card: React.FC<CardProps> = ({ suit, rank, hidden }) => {
 
     if (hidden) {
         return (
-            <div className="card-sketch w-32 h-48 flex items-center justify-center bg-gray-100">
-                <span className="text-4xl text-gray-400">?</span>
+            <div className="w-24 h-32 flex items-center justify-center bg-white border-4 border-gray-800 rounded-xl">
+                <div className="text-4xl">🂠</div>
             </div>
         );
     }
 
     if (!suit || !rank) {
         return (
-            <div className="card-sketch w-32 h-48 flex items-center justify-center bg-gray-50">
+            <div className="w-24 h-32 flex items-center justify-center bg-white border-4 border-gray-800 rounded-xl">
                 <span className="text-2xl text-gray-300">-</span>
             </div>
         );
     }
 
     return (
-        <div className="card-sketch w-32 h-48 flex flex-col justify-between items-start min-w-[8rem] p-3">
-            <div className={`text-2xl font-bold ${isRed ? 'text-red-700' : 'text-black'}`}>
-                {rank}{suit}
-            </div>
-            <div className="self-center text-6xl opacity-20">
-                {suit}
-            </div>
-            <div className={`text-2xl font-bold self-end rotate-180 ${isRed ? 'text-red-700' : 'text-black'}`}>
+        <div className="w-24 h-32 flex items-center justify-center bg-white border-4 border-gray-800 rounded-xl">
+            <div className={`text-3xl font-bold ${isRed ? 'text-red-600' : 'text-black'}`}>
                 {rank}{suit}
             </div>
         </div>

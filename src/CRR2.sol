@@ -211,14 +211,11 @@ contract CommitReveal2 {
             }
         }
 
-        // If no one revealed, we can't proceed (Project Failure case)
         require(concatenatedCos.length > 0, "No valid reveals in Phase 1");
 
         omega_v = keccak256(concatenatedCos);
         emit Phase1Finalized(omega_v);
 
-        // 2. Calculate d_i for all participants
-        // di = H(|Omega_v - cv_i|)
         uint256 omegaInt = uint256(omega_v);
         require(omegaInt != 0, "omegaInt cannot be null");
 
@@ -234,13 +231,7 @@ contract CommitReveal2 {
         }
     }
 
-    /**
-     * @notice Submits the calculated reveal order.
-     * Gas Optimization: Sorting is done off-chain. Contract only verifies the order.
-     * @param _sortedAddresses Array of addresses sorted by d_val descending.
-     */
     function submitRevealOrder(address[] calldata _sortedAddresses) external inPhase(Phase.OrderCalculation) {
-        // Calculate d_vals first if not done
         if (omega_v == bytes32(0)) {
             calculateIntermediateValues();
         }
@@ -252,11 +243,8 @@ contract CommitReveal2 {
             address addr = _sortedAddresses[i];
             Participant storage p = rounds[id].participants[addr];
 
-            // Filter out those who didn't pass Reveal 1 or fake addresses
             require(p.revealed1, "Address in list did not reveal Phase 1");
 
-            // Verify Descending Sort: d_{i-1} > d_i
-            // Note: Ties are extremely rare with Keccak256, but >= allows them
             require(p.dVal <= lastDVal, "List not sorted by dVal descending");
 
             lastDVal = p.dVal;
@@ -264,14 +252,12 @@ contract CommitReveal2 {
             count++;
         }
 
-        // Ensure we included everyone who successfully revealed in Phase 1
         uint256 totalValidRevealers = 0;
         for (uint256 k = 0; k < rounds[id].participantList.length; k++) {
             if (rounds[id].participants[rounds[id].participantList[k]].revealed1) totalValidRevealers++;
         }
         require(revealOrder.length == totalValidRevealers, "Missing valid participants in order list");
 
-        // Start Reveal 2
         lastTurnActionTime = block.timestamp;
         emit RevealOrderEstablished(count);
     }

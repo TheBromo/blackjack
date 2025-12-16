@@ -20,30 +20,29 @@ body {
 
 button {
   font-family: var(--font-hand);
-  background: white;
-  border: var(--border-sketch);
-  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
-  padding: 0.5rem 1.5rem;
-  font-size: 1.25rem;
+  font-size: 1.125rem;
+  padding: 0.75rem 2rem;
+  background-color: #3b82f6;
+  color: white;
+  border: 4px solid #1f2937;
+  border-radius: 0.75rem;
   cursor: pointer;
-  transition: transform 0.1s ease;
-  box-shadow: var(--shadow-sketch);
+  font-weight: bold;
+  transition: all 0.2s;
 }
 
-button:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 3px 3px 0px 0px var(--color-ink);
+button:hover:not(:disabled) {
+  background-color: #2563eb;
+  transform: translateY(-2px);
 }
 
-button:active {
-  transform: translate(1px, 1px);
-  box-shadow: 1px 1px 0px 0px var(--color-ink);
+button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  transform: none;
   box-shadow: var(--shadow-sketch);
 }
 

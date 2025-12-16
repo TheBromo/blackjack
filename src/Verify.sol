@@ -18,7 +18,7 @@ contract Verify {
     mapping(uint256 => bool) sessionExists;
     uint256 id;
 
-    uint256 constant VERIFY_DURATION = 12 seconds;
+    uint256 constant VERIFY_DURATION = 30 seconds;
     event DebugLog(string message, uint256 val);
     event DebugBytes(string message, bytes32 val);
 

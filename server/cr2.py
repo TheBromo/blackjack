@@ -148,14 +148,14 @@ def crr(cr2,w3,user,registrar):
             print("your turn!")
             break
         elapsed = time.time() - start_time
-        if timeout > 5:
+        if timeout < elapsed:
             print("waiting too long")
             try:
                 current = cr2.functions.skipStalledUser().transact()
             except:
                 print("skip failed")
 
-        print(f"⏳ Still waiting for currenttltly waiting for{current}...")
+        print(f"⏳ Still waiting for {current}...")
         time.sleep(1)
 
     print("Submitting Reveal2...")
@@ -166,7 +166,7 @@ def crr(cr2,w3,user,registrar):
     # 10. Wait for Finished Phase
     # ---------------------------------------------------------
 
-    waitForStage(cr2,4,"finish")
+    # waitForStage(cr2,4,"finish")
 
     # ---------------------------------------------------------
     # 11. Fetch Final Randomness

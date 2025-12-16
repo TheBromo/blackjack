@@ -1,0 +1,222 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-light: #ffffff;
+  --color-dark: #171717;
+}
+
+.accent-text {
+  @apply text-slate-600;
+}
+
+body {
+  font-family:
+    "Comic Sans MS",
+    "Marker Felt",
+    "Kalam",
+    cursive,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    "Noto Sans",
+    sans-serif;
+  color: var(--color-dark);
+  background: var(--color-light);
+}
+
+/* Hand-drawn sketch styles */
+.bg-paper {
+  background-color: #fefefe;
+  background-image: 
+    radial-gradient(circle at 1px 1px, rgba(0,0,0,.15) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
+.sketch-text {
+  color: #2d3748;
+  text-shadow: 1px 1px 0px rgba(0,0,0,0.1);
+  transform: rotate(-0.5deg);
+}
+
+.sketch-border-bottom {
+  border-bottom: 3px solid #2d3748;
+  border-image: url("data:image/svg+xml,%3csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='m0,10 q25,5 50,0 t50,0' stroke='%232d3748' stroke-width='3' fill='none'/%3e%3c/svg%3e") 3;
+  position: relative;
+}
+
+.sketch-card {
+  background: white;
+  border: 3px solid #2d3748;
+  border-radius: 15px;
+  box-shadow: 
+    3px 3px 0px rgba(0,0,0,0.1),
+    inset 1px 1px 0px rgba(255,255,255,0.8);
+  transform: rotate(0.5deg);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.sketch-card:hover {
+  transform: rotate(0deg) scale(1.02);
+  box-shadow: 
+    5px 5px 0px rgba(0,0,0,0.15),
+    inset 1px 1px 0px rgba(255,255,255,0.8);
+}
+
+.sketch-card-small {
+  background: white;
+  border: 2px solid #2d3748;
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-width: 60px;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+  transform: rotate(-1deg);
+}
+
+.sketch-card-small:nth-child(even) {
+  transform: rotate(1deg);
+}
+
+.sketch-button {
+  background: #4299e1;
+  color: white;
+  border: 3px solid #2d3748;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-weight: bold;
+  font-size: 16px;
+  cursor: pointer;
+  transform: rotate(-0.5deg);
+  transition: all 0.2s ease;
+  box-shadow: 3px 3px 0px rgba(0,0,0,0.2);
+  position: relative;
+}
+
+.sketch-button:hover:not(:disabled) {
+  transform: rotate(0deg) translateY(-2px);
+  box-shadow: 4px 4px 0px rgba(0,0,0,0.2);
+  background: #3182ce;
+}
+
+.sketch-button:active:not(:disabled) {
+  transform: rotate(0deg) translateY(1px);
+  box-shadow: 1px 1px 0px rgba(0,0,0,0.2);
+}
+
+.sketch-button:disabled {
+  background: #a0aec0;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.sketch-button-secondary {
+  background: #e2e8f0;
+  color: #2d3748;
+  border: 3px solid #2d3748;
+  border-radius: 12px;
+  padding: 8px 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transform: rotate(0.5deg);
+  transition: all 0.2s ease;
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+}
+
+.sketch-button-secondary:hover {
+  transform: rotate(0deg) translateY(-1px);
+  box-shadow: 3px 3px 0px rgba(0,0,0,0.15);
+  background: #cbd5e0;
+}
+
+.sketch-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e2e8f0;
+  border-top: 4px solid #4299e1;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  transform: rotate(-5deg);
+}
+
+@keyframes spin {
+  0% { transform: rotate(-5deg); }
+  100% { transform: rotate(355deg); }
+}
+
+/* Auth styles with sketch theme */
+.auth-input-field {
+  @apply w-full px-4 py-3 bg-white border-2 border-gray-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all;
+  border-radius: 12px;
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+  transform: rotate(-0.2deg);
+  font-family: inherit;
+}
+
+.auth-input-field:focus {
+  transform: rotate(0deg);
+  box-shadow: 3px 3px 0px rgba(0,0,0,0.15);
+}
+
+.auth-button {
+  @apply w-full px-4 py-3 bg-blue-500 text-white font-bold hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  border: 3px solid #2d3748;
+  border-radius: 12px;
+  box-shadow: 3px 3px 0px rgba(0,0,0,0.2);
+  transform: rotate(-0.3deg);
+  font-family: inherit;
+}
+
+.auth-button:hover:not(:disabled) {
+  transform: rotate(0deg) translateY(-1px);
+  box-shadow: 4px 4px 0px rgba(0,0,0,0.2);
+}
+
+.auth-button:active:not(:disabled) {
+  transform: rotate(0deg) translateY(1px);
+  box-shadow: 1px 1px 0px rgba(0,0,0,0.2);
+}
+
+/* Range input styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 5px;
+  border: 2px solid #2d3748;
+  outline: none;
+  transform: rotate(-0.5deg);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  background: #4299e1;
+  border: 2px solid #2d3748;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  background: #4299e1;
+  border: 2px solid #2d3748;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+}

@@ -16,7 +16,7 @@ contract Blackjack {
     address payable public immutable HOUSE;
     address payable public immutable CONTROLLER;
 
-    uint256 public immutable ROUND_DURATION = 4 seconds;
+    uint256 public immutable ROUND_DURATION = 40 seconds;
     event GameCreated(uint256 gameId);
     event PlayerAction(string action);
 
@@ -428,5 +428,14 @@ contract Blackjack {
 
     function hasPlayed() external view returns (bool) {
         return games[gameId].hasPlayed[msg.sender];
+    }
+
+    function getDealreHand() external view returns (Hand memory hand) {
+        return games[gameId].dealerHand;
+    }
+
+    function getPlayerCards() external view returns (Hand memory hand) {
+        PlayerState storage player = _getPlayer(msg.sender);
+        return player.hand;
     }
 }

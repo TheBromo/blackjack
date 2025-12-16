@@ -7,7 +7,7 @@ import "./EfficientHashLib.sol";
 
 library Helper {
     // using Helper for Blackjack.Game;
-    event CardPlayed(bytes32 seed, Blackjack.Card card);
+    event CardPlayed(bytes32 seed, Blackjack.Card card, address player, uint256 gameId);
     event DealerResult(uint256 score, Blackjack.Hand hand);
     event PlayerResult(uint256 score, Blackjack.Hand hand);
 
@@ -18,7 +18,7 @@ library Helper {
         Blackjack.Card memory card = _drawCard(game, seed);
         player.hand.cards.push(card);
         _updateHandTotal(player.hand, card);
-        emit CardPlayed(seed, card);
+        emit CardPlayed(seed, card, player.addr, game.roundId);
     }
 
     function _dealCardToDealer(Blackjack.Game storage game, bytes32 seed) internal {
@@ -26,7 +26,7 @@ library Helper {
         Blackjack.Card memory card = _drawCard(game, seed);
         game.dealerHand.cards.push(card);
         _updateHandTotal(game.dealerHand, card);
-        emit CardPlayed(seed, card);
+        emit CardPlayed(seed, card, address(0), game.roundId);
     }
 
     function _drawCard(Blackjack.Game storage game, bytes32 seed) internal returns (Blackjack.Card memory) {

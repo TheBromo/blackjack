@@ -1,0 +1,141 @@
+[
+  {
+    "type": "event",
+    "name": "CardPlayed",
+    "inputs": [
+      {
+        "name": "seed",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "card",
+        "type": "tuple",
+        "indexed": false,
+        "internalType": "struct Blackjack.Card",
+        "components": [
+          {
+            "name": "value",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "suit",
+            "type": "uint8",
+            "internalType": "uint8"
+          }
+        ]
+      },
+      {
+        "name": "player",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "gameId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DealerResult",
+    "inputs": [
+      {
+        "name": "score",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "hand",
+        "type": "tuple",
+        "indexed": false,
+        "internalType": "struct Blackjack.Hand",
+        "components": [
+          {
+            "name": "cards",
+            "type": "tuple[]",
+            "internalType": "struct Blackjack.Card[]",
+            "components": [
+              {
+                "name": "value",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "suit",
+                "type": "uint8",
+                "internalType": "uint8"
+              }
+            ]
+          },
+          {
+            "name": "total",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "hasUsableAce",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PlayerResult",
+    "inputs": [
+      {
+        "name": "score",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "hand",
+        "type": "tuple",
+        "indexed": false,
+        "internalType": "struct Blackjack.Hand",
+        "components": [
+          {
+            "name": "cards",
+            "type": "tuple[]",
+            "internalType": "struct Blackjack.Card[]",
+            "components": [
+              {
+                "name": "value",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "suit",
+                "type": "uint8",
+                "internalType": "uint8"
+              }
+            ]
+          },
+          {
+            "name": "total",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "hasUsableAce",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      }
+    ],
+    "anonymous": false
+  }
+]

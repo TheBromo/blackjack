@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
+
+:root {
+  --font-hand: 'Patrick Hand', cursive;
+  --color-ink: #2c3e50;
+  --color-paper: #fdfbf7;
+  --color-paper-dark: #f0e6d2;
+  --shadow-sketch: 2px 2px 0px 0px var(--color-ink);
+  --border-sketch: 2px solid var(--color-ink);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-hand);
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+button {
+  font-family: var(--font-hand);
+  background: white;
+  border: var(--border-sketch);
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+  padding: 0.5rem 1.5rem;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+  box-shadow: var(--shadow-sketch);
+}
+
+button:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px 0px var(--color-ink);
+}
+
+button:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px 0px var(--color-ink);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: var(--shadow-sketch);
+}
+
+.card-sketch {
+  background: white;
+  border: var(--border-sketch);
+  border-radius: 10px;
+  padding: 1rem;
+  box-shadow: var(--shadow-sketch);
+}
+
+input {
+  font-family: var(--font-hand);
+  padding: 0.5rem;
+  border: var(--border-sketch);
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+  background: white;
+  font-size: 1rem;
+  outline: none;
+}
+
+input:focus {
+  box-shadow: var(--shadow-sketch);
+}

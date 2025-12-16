@@ -10,10 +10,10 @@ contract Setup {
 
     uint256 constant MAX_PARTICIPANTS = 5;
     //DURATION
-    uint256 public constant BETTING_DURATION = 3 seconds;
-    uint256 public constant CRR_DURATION = 12 seconds;
-    uint256 public constant CHAIN_DURATION = 3 seconds;
-    uint256 public constant CUT_DURATION = 6 seconds;
+    uint256 public constant BETTING_DURATION = 10 seconds;
+    uint256 public constant CRR_DURATION = 10 seconds;
+    uint256 public constant CHAIN_DURATION = 10 seconds;
+    uint256 public constant CUT_DURATION = 10 seconds;
     uint256 public constant TOTAL_DURATION = CRR_DURATION + BETTING_DURATION + CHAIN_DURATION + CUT_DURATION;
     //BET
     uint256 public constant MAX_BET = 100 ether;

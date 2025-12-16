@@ -34,7 +34,7 @@ contract CommitReveal2 {
 
     uint256 public constant MIN_DEPOSIT = 0.1 ether;
     // Timeout to allow skipping a user who stalls Reveal2
-    uint256 public constant TURN_TIMEOUT = 3 seconds;
+    uint256 public constant TURN_TIMEOUT = 5 seconds;
     uint256 public immutable COMMIT_DURATION;
     uint256 public immutable REVEAL_DURATION;
 
